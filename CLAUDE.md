@@ -51,7 +51,8 @@ Board letters = slot (K Q R B N P), uppercase=White, lowercase=Black. `positionK
 
 ## Project Status
 
-Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)
+Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)  
+Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -63,9 +64,64 @@ Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)
 | `squareToAlgebraic(sq): string` | `sfen.ts` |
 | `algebraicToSquare(s): Square` | `sfen.ts` |
 | `positionKey(state): string` | `positionKey.ts` |
+| `legalTurns(state): Turn[]` | `legality.ts` |
+| `applyTurn(state, turn): GameState` | `legality.ts` |
+| `applyTurnUnchecked(state, turn): GameState` | `apply.ts` |
+| `gameStatus(state): GameStatus` | `status.ts` |
+| `registerThreatModel(army, model)` | `threat.ts` |
+| `getThreatModel(army): ThreatModel` | `threat.ts` |
+| `registerGenerator(army, gen)` | `movegen.ts` |
+| `ThreatModel` (interface) | `threat.ts` |
+| `GameStatus` (type) | `status.ts` |
 | `Square`, `Color`, `Army`, `Slot` | `types.ts` |
 | `Piece`, `GameState` | `types.ts` |
 | `Turn`, `PrimaryAction` | `types.ts` |
 | `StandardMove`, `TeleportMove`, `Shatter`, `RallyStep` | `types.ts` |
 
-Not yet implemented: move generation, legality checking, check detection, UI, PBM logic.
+## Kernel API (frozen — army sessions extend via registries only)
+
+Pipeline: `legalTurns` → pseudo-legal generation via army generator → filter by no-self-check → castling through/from-check filter → captureConstraints veto (target army) → checkResponseConstraint (opponent army, if mover in check).
+
+**To add a new army:** register a `MoveGenerator` and a `ThreatModel` — no pipeline edits needed.
+
+```ts
+// In your army module (e.g. src/engine/phantom.ts):
+import { registerGenerator, registerThreatModel } from './legality'; // or './movegen'/'./threat'
+
+registerGenerator('Phantom', phantomGenerator);
+registerThreatModel('Phantom', phantomThreatModel);
+```
+
+Then import the module in `index.ts` for the side-effect registration.
+
+### ThreatModel interface
+
+```ts
+interface ThreatModel {
+  attackedSquares(state, byColor): Set<Square>;   // squares pieces of byColor attack
+  royalsInCheck(state, color): Square[];           // royal squares of color that are in check
+  checkResponseConstraint?(state, turn): boolean;  // veto on check responses (Phantom Shade)
+  captureConstraints?(state, capturerFrom, sq): boolean; // veto on captures targeting this army
+}
+```
+
+### GameStatus type
+
+```ts
+type GameStatus =
+  | { type: 'ongoing' }
+  | { type: 'win'; by: 'checkmate' | 'invasion' | 'stalemate-loss'; winner: Color }
+  | { type: 'draw'; by: 'threefold' | 'fifty-move' | 'material' };
+```
+
+Invasion: White wins when king reaches row index 4 (rank 5); Black wins on row index 3 (rank 4).  
+Stalemate = loss for the stalemated side.  
+Insufficient-material draw stub returns false (full detection in S8).
+
+## positionKeys convention
+
+`applyTurnUnchecked` appends the resulting position's key to `positionKeys`.  
+Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
+Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
+
+Not yet implemented: remaining five armies, notation, UI, PBM logic.

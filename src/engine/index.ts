@@ -23,3 +23,14 @@ export {
 } from './sfen';
 
 export { positionKey } from './positionKey';
+
+export type { ThreatModel } from './threat';
+export { registerThreatModel, getThreatModel, fideThreatModel } from './threat';
+
+export { registerGenerator } from './movegen';
+
+export { legalTurns, applyTurn } from './legality';
+export { applyTurnUnchecked } from './apply';
+
+export type { GameStatus } from './status';
+export { gameStatus } from './status';
