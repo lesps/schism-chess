@@ -27,7 +27,10 @@ export { positionKey } from './positionKey';
 export type { ThreatModel } from './threat';
 export { registerThreatModel, getThreatModel, fideThreatModel } from './threat';
 
-export { registerGenerator } from './movegen';
+export { registerGenerator, fideGenerator } from './movegen';
+
+// Army registrations (side-effect imports)
+import './phantom';
 
 export { legalTurns, applyTurn } from './legality';
 export { applyTurnUnchecked } from './apply';

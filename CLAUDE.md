@@ -52,7 +52,8 @@ Board letters = slot (K Q R B N P), uppercase=White, lowercase=Black. `positionK
 ## Project Status
 
 Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)  
-Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)
+Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)  
+Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint wiring)
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -71,6 +72,8 @@ Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)
 | `registerThreatModel(army, model)` | `threat.ts` |
 | `getThreatModel(army): ThreatModel` | `threat.ts` |
 | `registerGenerator(army, gen)` | `movegen.ts` |
+| `fideGenerator` | `movegen.ts` |
+| `THRALL_HOMING_TWINS` | `phantom.ts` |
 | `ThreatModel` (interface) | `threat.ts` |
 | `GameStatus` (type) | `status.ts` |
 | `Square`, `Color`, `Army`, `Slot` | `types.ts` |
@@ -124,4 +127,18 @@ Insufficient-material draw stub returns false (full detection in S8).
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: remaining five armies, notation, UI, PBM logic.
+Not yet implemented: Accord, Twins, Veil, Wild armies; notation; UI; PBM logic.
+
+## checkResponseConstraint wiring
+
+`legality.ts` applies `oppModel.checkResponseConstraint(state, turn)` when the current mover's royals are in check **before** the move. The constraint belongs to the **checking side's** army (e.g., Phantom) and restricts the **checked side's** valid responses. Pre-computed once per `legalTurns` call (`royalsCheckedBefore`) to avoid redundant work.
+
+## Phantom army (`src/engine/phantom.ts`)
+
+Registered as both generator and ThreatModel for army `'Phantom'`.
+
+**Shade** (Q-slot): slides like a Queen, cannot capture, attacks all Queen-line squares for threat purposes. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`).
+
+**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to unoccupied square that reduces Chebyshev distance to enemy king). No en passant given or received. Promote to standard FIDE pieces.
+
+`THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if it reduces distance to at least one Warlord.
