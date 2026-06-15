@@ -170,3 +170,6 @@ function crownGenerator(state: GameState): Turn[] {
 }
 
 registerGenerator('Crown', crownGenerator);
+
+// Exported so tests can register other armies using FIDE-move semantics as a stub.
+export { crownGenerator as fideGenerator };

@@ -16,6 +16,11 @@ export function legalTurns(state: GameState): Turn[] {
   const oppModel = getThreatModel(oppArmy);
   const ownModel = getThreatModel(army);
 
+  // Pre-compute: is the current player in check before moving?
+  // Used to gate checkResponseConstraint (opponent's army may restrict valid responses).
+  const royalsCheckedBefore = ownModel.royalsInCheck(state, color);
+  const inCheckBefore = royalsCheckedBefore.length > 0;
+
   return pseudo.filter(turn => {
     const primary = turn.primary;
 
@@ -43,6 +48,12 @@ export function legalTurns(state: GameState): Turn[] {
           if (!targetModel.captureConstraints(state, mv.from, mv.to)) return false;
         }
       }
+    }
+
+    // Opponent's checkResponseConstraint: restricts how the mover may answer check
+    // (e.g., Phantom's Shade: interposition is not a legal response).
+    if (inCheckBefore && oppModel.checkResponseConstraint) {
+      if (!oppModel.checkResponseConstraint(state, turn)) return false;
     }
 
     // General: own royals must not be in check after turn
