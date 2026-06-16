@@ -54,7 +54,8 @@ Board letters = slot (K Q R B N P), uppercase=White, lowercase=Black. `positionK
 Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)  
 Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)  
 Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint wiring)  
-Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essence accounting)
+Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essence accounting)  
+Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `ACCORD_EMPOWERMENT` flag)
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -128,7 +129,7 @@ Insufficient-material draw stub returns false (full detection in S8).
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: Accord, Twins, Wild armies; notation; UI; PBM logic.
+Not yet implemented: Twins, Wild armies; notation; UI; PBM logic.
 
 ## captureConstraints call-site (S4 wired; S7 populates)
 
@@ -151,3 +152,15 @@ Registered as both generator and ThreatModel for army `'Phantom'`.
 **Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to unoccupied square that reduces Chebyshev distance to enemy king). No en passant given or received. Promote to standard FIDE pieces.
 
 `THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if it reduces distance to at least one Warlord.
+
+## Accord army (`src/engine/accord.ts`)
+
+Registered as both generator and ThreatModel for army `'Accord'`.
+
+**Herald** (Q-slot): king-step move only, **cannot capture** (target square must be empty). Not royal — never appears in `royalsInCheck`, contributes zero attacked squares (same convention as Veil's Wisp), and is captured like any ordinary piece by the opponent's own movegen.
+
+**Banner**: `bannerZone(board, color)` (exported) returns the Chebyshev-distance-≤1 zone around the friendly Herald, clipped at the board edge (4 squares in a corner, 6 on an edge, 9 in the open). A friendly Knight/Bishop/Rook standing in that zone is **Empowered** — computed fresh from the current board on every call to the generator and to `attackedSquares`, so checks appear/vanish purely positionally (Herald moves, dies, or the piece leaves the zone) with no extra bookkeeping. Empowerment bonus targets are deduped against the piece's native move/attack set before being added (`accord.ts`'s `slideTargets`/`knightTargets`/`kingStepTargets` helpers), so there are no duplicate `Turn`s.
+
+**`ACCORD_EMPOWERMENT: 'king-step' | 'queen'`** (default `'king-step'`) — module-level flag in `accord.ts`, mutated only via the exported `setAccordEmpowerment(mode)` (ES module live-binding; importers read `ACCORD_EMPOWERMENT` directly but must call the setter to change it, e.g. in test `afterEach`). `'king-step'`: Empowered pieces gain a one-square move-or-capture in any direction. `'queen'`: the bonus becomes full Queen sliding from the piece's square instead. Pawns are never Empowered; promoted R/B/N are Empowered normally (promotion carries no metadata, so this falls out of reading the board as-is).
+
+Pawns/King have no Accord-specific behavior (King is a plain non-castling king-step royal, matching the Phantom/Veil convention — only Crown gets castling rights from `initialState`).

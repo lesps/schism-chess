@@ -32,6 +32,7 @@ export { registerGenerator, fideGenerator } from './movegen';
 // Army registrations (side-effect imports)
 import './phantom';
 import './veil';
+import './accord';
 
 export { legalTurns, applyTurn } from './legality';
 export { applyTurnUnchecked } from './apply';
