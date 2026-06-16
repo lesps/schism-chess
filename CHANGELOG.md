@@ -1,5 +1,21 @@
 # Changelog
 
+## S4 — 2026-06-16
+
+**Veil army: Essence-gated Wraith, teleport Wisps**
+
+- `src/engine/veil.ts` (new): Veil `MoveGenerator` + `ThreatModel`
+  - **Wraith** (Q-slot): Queen slides as `StandardMove` + `TeleportMove` to non-slide-reachable squares (no duplicates); captures gated at ≥1 Essence; teleport-captures have `isCapture: true`
+  - **Wisps** (R-slot): `TeleportMove` to any empty square only; no captures, no attacks
+  - **ThreatModel**: Wraith attacks Queen-LOS at ≥1 Essence, inert at 0; Wisps never attack; standard FIDE attacks for King/Bishop/Knight/Pawn
+  - **Essence gain**: non-Wraith Veil piece captures enemy Pawn (`slot='P'`) → +1 Essence (capped 4); Wraith capture → −1 (no gain even on pawn capture)
+- `src/engine/types.ts`: `GameState.lastTurnMeta?: { essenceDelta? }` for S9 notation; optional, excluded from SFEN and positionKey
+- `src/engine/apply.ts`: `TeleportMove` support; Essence delta computed before board mutation and stored in `lastTurnMeta`; `lastTurnMeta` always explicitly set (never inherits prior turn's value via spread)
+- `src/engine/legality.ts`: `captureConstraints` now applied to `TeleportMove` captures (S7/Wild Behemoth Armor will populate); `applyTurn` matching extended to `TeleportMove`
+- `src/engine/index.ts`: `import './veil'` side-effect registration
+- `tests/engine/veil.test.ts` (new, 26 tests): Essence drain 2→1→0, captures absent at 0, slide-capture vs teleport-capture deduplication, check gating by Essence, checkmate fixture at Essence ≥ 1 (not mate at 0), Wisp full move set = all empty squares, Wisp blocks sliding + Shade LOS, Wisp capturable by knight, Wraith pin at ≥1 Essence (no pin at 0), threefold draw with constant Essence, Essence change breaks repetition cycle
+- All 166 tests green
+
 ## S1 — 2026-06-15
 
 **Scaffold, engine types, SFEN-X, position keys, CI**

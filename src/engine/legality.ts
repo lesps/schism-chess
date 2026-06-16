@@ -1,4 +1,4 @@
-import type { GameState, Turn, StandardMove } from './types';
+import type { GameState, Turn, StandardMove, TeleportMove } from './types';
 import { getThreatModel } from './threat';
 import { getGenerator } from './movegen';
 import { applyTurnUnchecked } from './apply';
@@ -17,7 +17,6 @@ export function legalTurns(state: GameState): Turn[] {
   const ownModel = getThreatModel(army);
 
   // Pre-compute: is the current player in check before moving?
-  // Used to gate checkResponseConstraint (opponent's army may restrict valid responses).
   const royalsCheckedBefore = ownModel.royalsInCheck(state, color);
   const inCheckBefore = royalsCheckedBefore.length > 0;
 
@@ -37,7 +36,8 @@ export function legalTurns(state: GameState): Turn[] {
       }
     }
 
-    // captureConstraints: check target side's army constraint on any capture
+    // captureConstraints: target army may restrict who can capture its pieces.
+    // Checked for both StandardMove captures and TeleportMove captures.
     if (primary.type === 'standard') {
       const mv = primary as StandardMove;
       const targetPiece = state.board[mv.to];
@@ -49,9 +49,21 @@ export function legalTurns(state: GameState): Turn[] {
         }
       }
     }
+    if (primary.type === 'teleport') {
+      const tp = primary as TeleportMove;
+      if (tp.isCapture) {
+        const targetPiece = state.board[tp.to];
+        if (targetPiece) {
+          const targetArmy = targetPiece.color === 'W' ? state.armies.W : state.armies.B;
+          const targetModel = getThreatModel(targetArmy);
+          if (targetModel.captureConstraints) {
+            if (!targetModel.captureConstraints(state, tp.from, tp.to)) return false;
+          }
+        }
+      }
+    }
 
     // Opponent's checkResponseConstraint: restricts how the mover may answer check
-    // (e.g., Phantom's Shade: interposition is not a legal response).
     if (inCheckBefore && oppModel.checkResponseConstraint) {
       if (!oppModel.checkResponseConstraint(state, turn)) return false;
     }
@@ -72,9 +84,11 @@ export function applyTurn(state: GameState, turn: Turn): GameState {
       return tp.from === primary.from && tp.to === primary.to &&
         (tp.promotion ?? null) === (primary.promotion ?? null);
     }
+    if (tp.type === 'teleport' && primary.type === 'teleport') {
+      return tp.from === primary.from && tp.to === primary.to && tp.isCapture === primary.isCapture;
+    }
     return false;
   });
   if (!found) throw new Error('applyTurn: illegal move');
   return applyTurnUnchecked(state, turn);
 }
-

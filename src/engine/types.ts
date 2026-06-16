@@ -61,4 +61,8 @@ export interface GameState {
   halfmoveClock: number;
   fullmoveNumber: number;
   positionKeys: string[];             // repetition history — NOT serialized in SFEN-X
+  // Per-turn metadata for notation (S9). Not in positionKey; not serialized in SFEN-X.
+  lastTurnMeta?: {
+    essenceDelta?: { color: Color; from: number; to: number };
+  };
 }

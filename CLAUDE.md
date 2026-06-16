@@ -53,7 +53,8 @@ Board letters = slot (K Q R B N P), uppercase=White, lowercase=Black. `positionK
 
 Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)  
 Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)  
-Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint wiring)
+Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint wiring)  
+Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essence accounting)
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -127,7 +128,15 @@ Insufficient-material draw stub returns false (full detection in S8).
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: Accord, Twins, Veil, Wild armies; notation; UI; PBM logic.
+Not yet implemented: Accord, Twins, Wild armies; notation; UI; PBM logic.
+
+## captureConstraints call-site (S4 wired; S7 populates)
+
+`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for **both** `StandardMove` captures and `TeleportMove` captures. Default: no registered model = no constraint. Wild's session (S7) will populate Behemoth Armor here — Veil's Wraith teleport-captures already route through this path correctly.
+
+## lastTurnMeta (added S4)
+
+`GameState.lastTurnMeta?: { essenceDelta?: { color, from, to } }` records the per-turn Essence change for notation (S9 `(E:n→m)` annotations). Set by `applyTurnUnchecked`; not in SFEN-X; not in positionKey. Explicitly set to `undefined` on every turn (never carries over from previous state).
 
 ## checkResponseConstraint wiring
 
