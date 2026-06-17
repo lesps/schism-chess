@@ -1,5 +1,20 @@
 # Changelog
 
+## S5 — 2026-06-16
+
+**Accord army: Herald Banner, empowered threat model, queen-mode flag**
+
+- `src/engine/accord.ts` (new): Accord `MoveGenerator` + `ThreatModel`
+  - **Herald** (Q-slot): king-step move only, no captures, not royal, no attack contribution (captured normally by opponents)
+  - **Banner**: `bannerZone(board, color)` (exported) — Chebyshev-≤1 zone around the friendly Herald, clipped at board edges
+  - **Empowerment**: friendly Knight/Bishop/Rook in the zone gains a bonus move/attack set deduped against its native squares — one-square king-step move-or-capture by default, or full Queen sliding under the `'queen'` flag value
+  - Empowerment computed fresh from the current board in both the generator and `attackedSquares` every call — checks appear/disappear purely from board position (Herald move/death, piece entering/leaving the zone), no extra state
+  - `ACCORD_EMPOWERMENT: 'king-step' | 'queen'` (default `'king-step'`), exported alongside `setAccordEmpowerment(mode)` to flip it (ES module live binding)
+  - Pawns never Empowered; King is a plain non-castling king-step royal (matches Phantom/Veil convention)
+- `src/engine/index.ts`: `import './accord'` side-effect registration
+- `tests/engine/accord.test.ts` (new, 27 tests): zone membership (center/corner/edge clipping, no-Herald, per-color), empowered rook diagonal king-step capture in/out of zone, empowered check + king exclusion from empowerment-only-covered squares, Herald-move-gives-check / Herald-move-removes-check / Herald-captured-removes-check fixtures, a checkmate that depends solely on empowerment (knight-checker geometry chosen so native attacks never overlap the king-step bonus) plus the same position with the Herald removed (not a win), edge king-step exit from the zone (legal, reverts next turn), pawns never Empowered, promoted Rook Empowered immediately, exact knight-empowered move-set enumeration, `'queen'`-mode flag flip (full diagonal slide; reverts on reset; reverts outside zone), Herald capturability/non-royal-ness, cross-army Herald capture by Crown queen, full invasion-win fixture
+- All 193 tests green
+
 ## S4 — 2026-06-16
 
 **Veil army: Essence-gated Wraith, teleport Wisps**
