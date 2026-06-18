@@ -1,5 +1,16 @@
-import type { Color, GameState, Square, StandardMove, TeleportMove, Turn } from './types';
+import type { Color, GameState, Shatter, Square, StandardMove, TeleportMove, Turn } from './types';
 import { positionKey } from './positionKey';
+
+/** Returns squares adjacent to sq (on-board Chebyshev-1 neighbors). */
+function shatterNeighbors(sq: Square): Square[] {
+  const rank = sq >> 3, file = sq & 7;
+  const out: Square[] = [];
+  for (const [dr, df] of [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]] as const) {
+    const r = rank + dr, f = file + df;
+    if (r >= 0 && r <= 7 && f >= 0 && f <= 7) out.push(r * 8 + f);
+  }
+  return out;
+}
 
 function updateCastlingRights(rights: string, from: Square, to: Square): string {
   let r = rights;
@@ -104,8 +115,23 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     // No en passant from a teleport; castling rights may change if a rook-corner is vacated/captured
     castlingRights = updateCastlingRights(state.castlingRights, from, to);
 
+  } else if (primary.type === 'shatter') {
+    const sh = primary as Shatter;
+    const nbrs = shatterNeighbors(sh.warlordSquare);
+    // Shatter resets the halfmove clock iff it removes at least one piece (treat as capture).
+    const removedAny = nbrs.some(n => board[n] !== null);
+    halfmoveClock = removedAny ? 0 : halfmoveClock + 1;
+    for (const n of nbrs) board[n] = null;
+    // No en passant, no castling-rights changes from Shatter
   } else {
     throw new Error(`applyTurnUnchecked: unsupported move type '${(primary as { type: string }).type}'`);
+  }
+
+  // Apply optional rally step (Twins bonus move: one Warlord one step, non-capturing)
+  if (turn.rally) {
+    board[turn.rally.to] = board[turn.rally.from];
+    board[turn.rally.from] = null;
+    // Rally does not affect halfmoveClock, enPassantTarget, castlingRights, or essence
   }
 
   const sideToMove: Color = moverColor === 'W' ? 'B' : 'W';

@@ -1,4 +1,4 @@
-import type { GameState, Turn, StandardMove, TeleportMove } from './types';
+import type { GameState, Turn, StandardMove, TeleportMove, Shatter } from './types';
 import { getThreatModel } from './threat';
 import { getGenerator } from './movegen';
 import { applyTurnUnchecked } from './apply';
@@ -74,18 +74,31 @@ export function legalTurns(state: GameState): Turn[] {
   });
 }
 
+function rallyEq(a: Turn['rally'], b: Turn['rally']): boolean {
+  if (a === undefined && b === undefined) return true;
+  if (a === undefined || b === undefined) return false;
+  return a.from === b.from && a.to === b.to;
+}
+
 export function applyTurn(state: GameState, turn: Turn): GameState {
   const legal = legalTurns(state);
   const primary = turn.primary;
   const found = legal.some(t => {
     const tp = t.primary;
     if (tp.type !== primary.type) return false;
+    if (!rallyEq(t.rally, turn.rally)) return false;
     if (tp.type === 'standard' && primary.type === 'standard') {
-      return tp.from === primary.from && tp.to === primary.to &&
-        (tp.promotion ?? null) === (primary.promotion ?? null);
+      return tp.from === (primary as StandardMove).from &&
+        tp.to === (primary as StandardMove).to &&
+        (tp.promotion ?? null) === ((primary as StandardMove).promotion ?? null);
     }
     if (tp.type === 'teleport' && primary.type === 'teleport') {
-      return tp.from === primary.from && tp.to === primary.to && tp.isCapture === primary.isCapture;
+      return tp.from === (primary as TeleportMove).from &&
+        tp.to === (primary as TeleportMove).to &&
+        tp.isCapture === (primary as TeleportMove).isCapture;
+    }
+    if (tp.type === 'shatter' && primary.type === 'shatter') {
+      return (tp as Shatter).warlordSquare === (primary as Shatter).warlordSquare;
     }
     return false;
   });

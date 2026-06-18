@@ -150,9 +150,9 @@ describe('en passant', () => {
 // ---------------------------------------------------------------------------
 describe('stalemate is a loss', () => {
   it('classic stalemate position → win for the other side', () => {
-    // White queen on f7, white king on f6, black king on h8 — black to move, stalemated
-    // Queen covers g8(diag), g7(rank), h7(rank); king covers g7(adj)
-    const state = parseSfen('7k/5Q2/5K2/8/8/8/8/8/b/Crown,Crown/-/-/0,0/-/0/1');
+    // White queen on f7 (covers g8 diag, g7 rank, h7 rank). Black king on h8, stalemated.
+    // White king at a1 (below midline) — only Q-slot piece is past rank 5, no invasion trigger.
+    const state = parseSfen('7k/5Q2/8/8/8/8/8/K7/b/Crown,Crown/-/-/0,0/-/0/1');
     const status = gameStatus(state);
     expect(status.type).toBe('win');
     if (status.type === 'win') {
@@ -208,9 +208,9 @@ describe('midline invasion', () => {
 // ---------------------------------------------------------------------------
 describe('checkmate', () => {
   it('lone king checkmated by queen + king', () => {
-    // White queen on g7 gives check to black king on h8; king on f6 covers g8 and g7
-    // Black king cannot move to g8 (queen file), h7 (queen rank), or capture g7 (king covers)
-    const state = parseSfen('7k/6Q1/5K2/8/8/8/8/8/b/Crown,Crown/-/-/0,0/-/0/1');
+    // Black king at a8, White Queen at a1 checks via a-file. White Rook at b1 covers b7, b8.
+    // a7 covered by Queen (a-file). White king at h1 (below midline). Classic back-rank mate.
+    const state = parseSfen('k7/8/8/8/8/8/8/QR5K/b/Crown,Crown/-/-/0,0/-/0/1');
     const status = gameStatus(state);
     expect(status.type).toBe('win');
     if (status.type === 'win') {
