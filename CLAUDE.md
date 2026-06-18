@@ -55,7 +55,8 @@ Done: S1 (types, starting positions, SFEN-X, position keys, CI scaffold)
 Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)  
 Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint wiring)  
 Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essence accounting)  
-Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `ACCORD_EMPOWERMENT` flag)
+Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `ACCORD_EMPOWERMENT` flag)  
+Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-check, dual-invasion win)
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -119,7 +120,8 @@ type GameStatus =
   | { type: 'draw'; by: 'threefold' | 'fifty-move' | 'material' };
 ```
 
-Invasion: White wins when king reaches row index 4 (rank 5); Black wins on row index 3 (rank 4).  
+Invasion: White wins when a K-slot royal reaches **row index ≥ 4** (rank 5+); Black wins on **row index ≤ 3** (rank 4−). Beyond-midline semantics: any row past the threshold counts, not just the exact row. Only K-slot pieces trigger invasion (Q/R/B/N/P past the midline do not).  
+Twins special case: BOTH Warlords must be past the midline simultaneously, and neither may be in check at that moment.  
 Stalemate = loss for the stalemated side.  
 Insufficient-material draw stub returns false (full detection in S8).
 
@@ -129,7 +131,7 @@ Insufficient-material draw stub returns false (full detection in S8).
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: Twins, Wild armies; notation; UI; PBM logic.
+Not yet implemented: Wild army; notation; UI; PBM logic.
 
 ## captureConstraints call-site (S4 wired; S7 populates)
 
@@ -164,3 +166,22 @@ Registered as both generator and ThreatModel for army `'Accord'`.
 **`ACCORD_EMPOWERMENT: 'king-step' | 'queen'`** (default `'king-step'`) — module-level flag in `accord.ts`, mutated only via the exported `setAccordEmpowerment(mode)` (ES module live-binding; importers read `ACCORD_EMPOWERMENT` directly but must call the setter to change it, e.g. in test `afterEach`). `'king-step'`: Empowered pieces gain a one-square move-or-capture in any direction. `'queen'`: the bonus becomes full Queen sliding from the piece's square instead. Pawns are never Empowered; promoted R/B/N are Empowered normally (promotion carries no metadata, so this falls out of reading the board as-is).
 
 Pawns/King have no Accord-specific behavior (King is a plain non-castling king-step royal, matching the Phantom/Veil convention — only Crown gets castling rights from `initialState`).
+
+## Twins army (`src/engine/twins.ts`)
+
+Registered as both generator and ThreatModel for army `'Twins'`.
+
+**Warlords** (both K-slots, d1/e1 for White, d8/e8 for Black): king-step move or capture in any of the 8 adjacent squares. Both Warlords are royal — `royalsInCheck` returns the squares of all checked K-slot pieces.
+
+**Rally** (optional bonus step): after the primary action, exactly one Warlord may move one square to an unoccupied square. Non-capturing. May not move into check. Encoded as `Turn.rally: RallyStep | undefined`.
+
+**Shatter** (primary action type `'shatter'`): the Warlord stays in place and atomically removes all pieces on its 8 surrounding squares (friendly and enemy alike). Bypasses `captureConstraints`. Illegal if the other Warlord is adjacent (Chebyshev distance 1). Resets the halfmove clock if ≥ 1 piece is removed.
+
+**One-action-per-check rule**: If exactly one Warlord is in check before the turn, the primary alone must fully resolve it (after primary, 0 Warlords in check). If both Warlords are in check (double check), the primary+rally together must resolve both — enforced by the kernel's universal end-state filter, with no additional intermediate constraint.
+
+**Dual invasion**: Both Warlords must be simultaneously past the midline (row ≥ 4 for White, row ≤ 3 for Black) and neither in check. Checked by `gameStatus` for the previous mover.
+
+**Kernel changes made for S6** (all backward-compatible):
+- `apply.ts`: Shatter action handling; rally application after all primary types.
+- `legality.ts`: `rallyEq()` helper; Shatter matching in `applyTurn`'s legality check.
+- `status.ts`: Beyond-midline invasion semantics (`row >= 4` for White, `row <= 3` for Black, K-slot only); Twins dual-invasion branch.

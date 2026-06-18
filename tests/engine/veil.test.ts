@@ -213,10 +213,13 @@ describe('Wraith check gates on Essence', () => {
 
   it('checking position at Essence=1 is checkmate when all escapes covered', () => {
     // White Wraith at a8 checks Black King at h8 via rank 8 (b8–g8 empty).
-    // White King at g6 covers g7, g8, h7. All three adjacent escape squares blocked.
+    // Knights at h5 (covers g7) and g5 (covers h7). g8 only covered by Wraith rank.
+    // White King at a1 stays below the midline. No K-slot piece past rank 5.
     const state = makeState([
-      { slot: 'K', color: 'W', at: 'g6' },
+      { slot: 'K', color: 'W', at: 'a1' },
       { slot: 'Q', color: 'W', at: 'a8' },  // Wraith
+      { slot: 'N', color: 'W', at: 'h5' },  // covers g7
+      { slot: 'N', color: 'W', at: 'g5' },  // covers h7
       { slot: 'K', color: 'B', at: 'h8' },
     ], {
       essence: { W: 1, B: 0 },
@@ -232,16 +235,19 @@ describe('Wraith check gates on Essence', () => {
   });
 
   it('same mate position at Essence=0 is not checkmate (Wraith inert)', () => {
+    // Same position but Essence=0: Wraith gives no check, Black king can flee to g8.
     const state = makeState([
-      { slot: 'K', color: 'W', at: 'g6' },
-      { slot: 'Q', color: 'W', at: 'a8' },  // Wraith
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'a8' },  // Wraith (inert)
+      { slot: 'N', color: 'W', at: 'h5' },  // covers g7 only
+      { slot: 'N', color: 'W', at: 'g5' },  // covers h7 only
       { slot: 'K', color: 'B', at: 'h8' },
     ], {
       essence: { W: 0, B: 0 },
       sideToMove: 'B',
       armies: { W: 'Veil', B: 'Crown' },
     });
-    // King can flee to g8 (Wraith at 0 Essence attacks nothing on rank 8)
+    // King can flee to g8 (Wraith inert; g8 not covered by knights)
     expect(gameStatus(state).type).toBe('ongoing');
   });
 });

@@ -28,11 +28,13 @@ export type { ThreatModel } from './threat';
 export { registerThreatModel, getThreatModel, fideThreatModel } from './threat';
 
 export { registerGenerator, fideGenerator } from './movegen';
+export { THRALL_HOMING_TWINS } from './phantom';
 
 // Army registrations (side-effect imports)
 import './phantom';
 import './veil';
 import './accord';
+import './twins';
 
 export { legalTurns, applyTurn } from './legality';
 export { applyTurnUnchecked } from './apply';

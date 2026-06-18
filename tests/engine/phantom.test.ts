@@ -212,12 +212,10 @@ describe('Shade cannot capture', () => {
 // ---------------------------------------------------------------------------
 describe('Shade checkmate', () => {
   it('Shade delivers checkmate (no interpose escape)', () => {
-    // Black king on h8. White Shade on a8 (same rank, checks h8).
-    // White king on g6 covers g8, g7, h7. Black king cannot flee:
-    // g8 covered by king, g7 covered by king, h7 covered by king.
-    // No interpose (only rank, everything between a8 and h8 is empty but interpose is banned).
-    // Black has no pieces to capture Shade.
-    const state = parseSfen('Q5k1/8/6K1/8/8/8/8/8/b/Phantom,Crown/-/-/0,0/-/0/5');
+    // Black king on h8. White Shade on a8 (rank check). Knight f6 covers g8+h7.
+    // Rook g1 covers g-file (g7, g8). White king stays below the midline at a1.
+    // No interpose (Shade check, interposition banned). Black has no pieces to capture Shade.
+    const state = parseSfen('Q6k/8/5N2/8/8/8/8/K5R1/b/Phantom,Crown/-/-/0,0/-/0/5');
     const status = gameStatus(state);
     expect(status.type).toBe('win');
     if (status.type === 'win') {
@@ -233,17 +231,10 @@ describe('Shade checkmate', () => {
 describe('Phantom stalemate-loss win', () => {
   it('opponent stalemated → Phantom wins', () => {
     // Black king on h8, not in check, but no legal moves.
-    // White Shade on f6 covers g7; White king on f8 covers g8, g7.
-    // White Shade on f6: can it reach g7? f6→g7 diagonal yes.
-    // King on f8 covers g8, g7, e8, e7.
-    // Black king on h8: adjacent squares g8 (covered by king), g7 (covered by Shade + king), h7 (?).
-    // Need h7 covered too. Let's add a white rook on h1 covering h-file.
-    // h7: rook on h1 covers entire h-file. But rook on h1 would also be checking h8? Yes.
-    // Use: Shade on g6 covers h7(diag) and h5(diag). King on f8. Black king on h8.
-    // g8 covered by king(f8), g7 covered by Shade(g6)? g6→g7 is rank+1 same file yes.
-    // h7 covered by Shade(g6)→h7 diagonal yes.
-    // So black king on h8 has: g8(king), g7(shade), h7(shade). All covered. Stalemate.
-    const state = parseSfen('5K1k/8/6Q1/8/8/8/8/8/b/Phantom,Crown/-/-/0,0/-/0/5');
+    // White Shade on f7 covers rank-7 (g7, h7) and diagonal g8. White king at a1 below midline.
+    // Black king at h8: g8 (Shade diagonal), g7 (Shade rank), h7 (Shade rank) all covered.
+    // Shade at f7 does NOT check h8 (f7→h8 is Δrow=1,Δfile=2, not a queen line).
+    const state = parseSfen('7k/5Q2/8/8/8/8/8/K7/b/Phantom,Crown/-/-/0,0/-/0/5');
     const status = gameStatus(state);
     expect(status.type).toBe('win');
     if (status.type === 'win') {

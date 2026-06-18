@@ -12,16 +12,36 @@ export function gameStatus(state: GameState): GameStatus {
   const current = state.sideToMove;
   const previous: Color = current === 'W' ? 'B' : 'W';
 
-  // 1. Invasion win — check if the previous mover's king reached the invasion rank
+  // 1. Invasion win — check if the previous mover's royals have crossed the midline.
+  // White invades by reaching row >= 4 (rank 5+); Black by reaching row <= 3 (rank 4-).
+  // For Twins: BOTH Warlords must be across the midline (neither in check).
+  // For all other armies: any one royal on or beyond the invasion row wins.
   const prevArmy = previous === 'W' ? state.armies.W : state.armies.B;
   const prevModel = getThreatModel(prevArmy);
-  // White's 5th rank = row index 4; Black's 5th rank (from their side) = row index 3
-  const invasionRow = previous === 'W' ? 4 : 3;
-  for (let sq = 0; sq < 64; sq++) {
-    const p = state.board[sq];
-    if (p && p.color === previous && p.slot === 'K' && (sq >> 3) === invasionRow) {
-      if (prevModel.royalsInCheck(state, previous).length === 0) {
-        return { type: 'win', by: 'invasion', winner: previous };
+  const invasionRowMin = previous === 'W' ? 4 : 0;  // row >= 4 for White
+  const invasionRowMax = previous === 'W' ? 7 : 3;  // row <= 3 for Black
+
+  if (prevArmy === 'Twins') {
+    // Both Warlords must be on the far side of the midline, neither in check
+    const warlords: number[] = [];
+    for (let sq = 0; sq < 64; sq++) {
+      const p = state.board[sq];
+      if (p && p.color === previous && p.slot === 'K') warlords.push(sq);
+    }
+    if (warlords.length >= 2 &&
+        warlords.every(sq => (sq >> 3) >= invasionRowMin && (sq >> 3) <= invasionRowMax) &&
+        prevModel.royalsInCheck(state, previous).length === 0) {
+      return { type: 'win', by: 'invasion', winner: previous };
+    }
+  } else {
+    for (let sq = 0; sq < 64; sq++) {
+      const p = state.board[sq];
+      const row = sq >> 3;
+      if (p && p.color === previous && p.slot === 'K' &&
+          row >= invasionRowMin && row <= invasionRowMax) {
+        if (prevModel.royalsInCheck(state, previous).length === 0) {
+          return { type: 'win', by: 'invasion', winner: previous };
+        }
       }
     }
   }
