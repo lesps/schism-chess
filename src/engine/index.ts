@@ -35,6 +35,7 @@ import './phantom';
 import './veil';
 import './accord';
 import './twins';
+import './wild';
 
 export { legalTurns, applyTurn } from './legality';
 export { applyTurnUnchecked } from './apply';

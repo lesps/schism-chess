@@ -56,7 +56,13 @@ Done: S2 (legality kernel + Crown complete, FIDE perft-verified at depth 1/2/3)
 Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint wiring)  
 Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essence accounting)  
 Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `ACCORD_EMPOWERMENT` flag)  
-Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-check, dual-invasion win)
+Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-check, dual-invasion win)  
+Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemoth/Stalker — captureConstraints call site existed from S2/S4)
+
+**S7a open todos for S7b to clear:**
+- `test.todo('rampage — S7b')` in `tests/engine/wild.test.ts` — Behemoth capture triggers continuation in same direction up to 3 total.
+- `test.todo('strike-and-return + exhaustion — S7b')` in `tests/engine/wild.test.ts` — Stalker returns to home square after capture; Exhausted next turn.
+- `it.todo('shade-check vs Twins: piercing check constraint composes with single-check rule')` in `tests/engine/twins.test.ts` — cross-army Phantom/Twins interaction, not S7b's responsibility.
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -131,11 +137,11 @@ Insufficient-material draw stub returns false (full detection in S8).
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: Wild army; notation; UI; PBM logic.
+Not yet implemented: Wild army rampage/Stalker strike-and-return (S7b); notation; UI; PBM logic.
 
-## captureConstraints call-site (S4 wired; S7 populates)
+## captureConstraints call-site (S4 wired; S7a populates)
 
-`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for **both** `StandardMove` captures and `TeleportMove` captures. Default: no registered model = no constraint. Wild's session (S7) will populate Behemoth Armor here — Veil's Wraith teleport-captures already route through this path correctly.
+`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for **both** `StandardMove` captures and `TeleportMove` captures. Default: no registered model = no constraint. Wild's `captureConstraints` (S7a) enforces Behemoth Armor: enemy captures of the Behemoth (R-slot) require `Chebyshev(capturerFrom, targetSq) ≤ 2`; friendly captures bypass Armor. Shatter (`type: 'shatter'`) is NOT routed through `captureConstraints` — it removes neighbors directly in `apply.ts`, so it always clears a Behemoth regardless of distance.
 
 ## lastTurnMeta (added S4)
 
