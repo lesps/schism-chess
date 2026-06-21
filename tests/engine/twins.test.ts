@@ -603,5 +603,17 @@ describe('applyTurn handles Shatter', () => {
 // ---------------------------------------------------------------------------
 describe('cross-army: Shade vs Twins', () => {
   it.todo('shade-check vs Twins: piercing check constraint composes with single-check rule');
-  it.todo('shatter clears armored Behemoth (requires Wild S7)');
+  it('shatter clears armored Wild Behemoth (bypasses captureConstraints)', () => {
+    // Wild Behemoth at e5 adjacent to shattering Warlord at e4.
+    // Shatter removes ALL adjacent pieces without invoking captureConstraints — Armor irrelevant.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'd1' },  // second Warlord (not adjacent to e4)
+      { slot: 'K', color: 'W', at: 'e4' },  // shattering Warlord
+      { slot: 'K', color: 'B', at: 'h8' },
+      { slot: 'R', color: 'B', at: 'e5' },  // Wild Behemoth adjacent to e4
+    ], { armies: { W: 'Twins', B: 'Wild' } });
+    const after = applyTurn(state, shatterTurn('e4'));
+    expect(after.board[sq('e5')]).toBeNull();  // Behemoth removed
+    expect(after.board[sq('e4')]).toEqual({ slot: 'K', color: 'W' }); // Warlord stays
+  });
 });
