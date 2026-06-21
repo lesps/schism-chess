@@ -1,4 +1,4 @@
-import type { GameState, Turn, StandardMove, TeleportMove, Shatter } from './types';
+import type { GameState, Turn, StandardMove, TeleportMove, Shatter, RampageMove, StrikeMove } from './types';
 import { getThreatModel } from './threat';
 import { getGenerator } from './movegen';
 import { applyTurnUnchecked } from './apply';
@@ -62,6 +62,32 @@ export function legalTurns(state: GameState): Turn[] {
         }
       }
     }
+    // Rampage: check captureConstraints for each piece in the capture list.
+    if (primary.type === 'rampage') {
+      const rm = primary as RampageMove;
+      for (const capSq of rm.captures) {
+        const capPiece = state.board[capSq];
+        if (capPiece) {
+          const capArmy = capPiece.color === 'W' ? state.armies.W : state.armies.B;
+          const capModel = getThreatModel(capArmy);
+          if (capModel.captureConstraints) {
+            if (!capModel.captureConstraints(state, rm.from, capSq)) return false;
+          }
+        }
+      }
+    }
+    // Strike: check captureConstraints for the target.
+    if (primary.type === 'strike') {
+      const sm = primary as StrikeMove;
+      const targetPiece = state.board[sm.target];
+      if (targetPiece) {
+        const targetArmy = targetPiece.color === 'W' ? state.armies.W : state.armies.B;
+        const targetModel = getThreatModel(targetArmy);
+        if (targetModel.captureConstraints) {
+          if (!targetModel.captureConstraints(state, sm.from, sm.target)) return false;
+        }
+      }
+    }
 
     // Opponent's checkResponseConstraint: restricts how the mover may answer check
     if (inCheckBefore && oppModel.checkResponseConstraint) {
@@ -99,6 +125,15 @@ export function applyTurn(state: GameState, turn: Turn): GameState {
     }
     if (tp.type === 'shatter' && primary.type === 'shatter') {
       return (tp as Shatter).warlordSquare === (primary as Shatter).warlordSquare;
+    }
+    if (tp.type === 'rampage' && primary.type === 'rampage') {
+      // (from, to) uniquely identifies the rampage: direction and distance are implied
+      return (tp as RampageMove).from === (primary as RampageMove).from &&
+        (tp as RampageMove).to === (primary as RampageMove).to;
+    }
+    if (tp.type === 'strike' && primary.type === 'strike') {
+      return (tp as StrikeMove).from === (primary as StrikeMove).from &&
+        (tp as StrikeMove).target === (primary as StrikeMove).target;
     }
     return false;
   });

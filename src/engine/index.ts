@@ -10,6 +10,8 @@ export type {
   StandardMove,
   TeleportMove,
   Shatter,
+  RampageMove,
+  StrikeMove,
   RallyStep,
 } from './types';
 

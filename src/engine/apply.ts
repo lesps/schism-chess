@@ -1,4 +1,4 @@
-import type { Color, GameState, Shatter, Square, StandardMove, TeleportMove, Turn } from './types';
+import type { Color, GameState, RampageMove, Shatter, Square, StandardMove, StrikeMove, TeleportMove, Turn } from './types';
 import { positionKey } from './positionKey';
 
 /** Returns squares adjacent to sq (on-board Chebyshev-1 neighbors). */
@@ -115,6 +115,20 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     // No en passant from a teleport; castling rights may change if a rook-corner is vacated/captured
     castlingRights = updateCastlingRights(state.castlingRights, from, to);
 
+  } else if (primary.type === 'rampage') {
+    const rm = primary as RampageMove;
+    const piece = board[rm.from]!;
+    for (const capSq of rm.captures) board[capSq] = null;
+    board[rm.from] = null;
+    board[rm.to] = piece;
+    halfmoveClock = rm.captures.length > 0 ? 0 : halfmoveClock + 1;
+    castlingRights = updateCastlingRights(state.castlingRights, rm.from, rm.to);
+
+  } else if (primary.type === 'strike') {
+    const sm = primary as StrikeMove;
+    board[sm.target] = null; // target removed; Stalker stays at sm.from
+    halfmoveClock = 0; // capture
+
   } else if (primary.type === 'shatter') {
     const sh = primary as Shatter;
     const nbrs = shatterNeighbors(sh.warlordSquare);
@@ -125,6 +139,21 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     // No en passant, no castling-rights changes from Shatter
   } else {
     throw new Error(`applyTurnUnchecked: unsupported move type '${(primary as { type: string }).type}'`);
+  }
+
+  // Stalker exhaustion lifecycle:
+  // - Clear exhaustion for any square where the current mover's Stalker was exhausted
+  //   (their one-turn restriction has now been served).
+  // - Also clear squares where the Stalker was captured (no piece there anymore).
+  // - If this turn was a StrikeMove, mark the Stalker's home square as exhausted for next turn.
+  const newExhausted: Square[] = state.exhausted.filter(sq => {
+    const p = state.board[sq]; // use pre-move board
+    if (!p) return false; // piece gone (captured by opponent previously) — drop
+    if (p.color === moverColor && p.slot === 'B') return false; // mover's exhaustion expires
+    return true; // opponent's exhaustion carries over until their next turn
+  });
+  if (primary.type === 'strike') {
+    newExhausted.push((primary as StrikeMove).from);
   }
 
   // Apply optional rally step (Twins bonus move: one Warlord one step, non-capturing)
@@ -144,6 +173,7 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     castlingRights,
     enPassantTarget,
     essence,
+    exhausted: newExhausted,
     halfmoveClock,
     fullmoveNumber,
     lastTurnMeta,

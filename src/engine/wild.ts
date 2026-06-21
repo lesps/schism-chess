@@ -7,6 +7,17 @@ const ORTHO_DIRS = [[-1,0],[1,0],[0,-1],[0,1]] as const;
 const DIAG_DIRS  = [[-1,-1],[-1,1],[1,-1],[1,1]] as const;
 const KNIGHT_JUMPS = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]] as const;
 
+// Resolved ruling for rampage vs an out-of-range enemy Behemoth.
+// 'wall': the armored Behemoth truncates the rampage at the square before it
+//         (pieces before it are still captured; it and squares beyond it are untouched).
+// 'illegal-move' (alternative): any rampage that would reach an out-of-range enemy Behemoth
+//         is wholly illegal instead.
+const RAMPAGE_VS_ARMOR = 'wall' as const;
+
+function chebyshev(a: Square, b: Square): number {
+  return Math.max(Math.abs((a >> 3) - (b >> 3)), Math.abs((a & 7) - (b & 7)));
+}
+
 function pushStd(turns: Turn[], from: Square, to: Square, promo?: Slot): void {
   const mv: { type: 'standard'; from: Square; to: Square; promotion?: Slot } =
     { type: 'standard', from, to };
@@ -43,51 +54,97 @@ function addApexMoves(state: GameState, from: Square, color: Color, turns: Turn[
   }
 }
 
-// Behemoth (R-slot, interim): up to 3 squares orthogonally; may capture friendly pieces (not royals).
-// S7b: replace with rampage (capture triggers continuation in same direction, up to 3 squares total).
+// Behemoth (R-slot): up to 3 squares orthogonally; may capture friendly pieces (not royals).
+// Rampage: on ANY capture the Behemoth must continue to maximum distance (3 from origin or
+// board edge), capturing every piece in its path (friendly and enemy). Stops before an
+// out-of-range enemy Behemoth when RAMPAGE_VS_ARMOR='wall'. Illegal if path crosses a
+// friendly royal.
 function addBehemothMoves(state: GameState, from: Square, color: Color, turns: Turn[]): void {
   const board = state.board;
   const rank = from >> 3, file = from & 7;
 
   for (const [dr, df] of ORTHO_DIRS) {
-    let r = rank + dr, f = file + df;
-    let steps = 0;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 3) {
-      const to = r * 8 + f;
-      const tp = board[to];
-      if (tp) {
-        if (tp.color === color) {
-          if (tp.slot !== 'K') pushStd(turns, from, to); // friendly non-royal: may capture
+    // Build path: up to 3 squares in this direction, within board
+    const path: Square[] = [];
+    let r = rank + dr, f2 = file + df;
+    while (r >= 0 && r <= 7 && f2 >= 0 && f2 <= 7 && path.length < 3) {
+      path.push(r * 8 + f2);
+      r += dr; f2 += df;
+    }
+    if (path.length === 0) continue;
+
+    // Find first occupied square
+    let firstPieceIdx = -1;
+    for (let i = 0; i < path.length; i++) {
+      if (board[path[i]] !== null) { firstPieceIdx = i; break; }
+    }
+
+    // Non-capture moves: all empty squares before the first piece
+    const nonCapEnd = firstPieceIdx === -1 ? path.length : firstPieceIdx;
+    for (let i = 0; i < nonCapEnd; i++) {
+      pushStd(turns, from, path[i]);
+    }
+
+    if (firstPieceIdx === -1) continue; // all empty — only non-capture moves in this direction
+
+    // Rampage: go to maximum distance from firstPieceIdx onward.
+    // Collect captures, apply armor-wall truncation and friendly-royal exclusion.
+    const captures: Square[] = [];
+    let rampageEnd = path.length - 1; // default: go to end of path
+    let illegal = false;
+
+    for (let i = firstPieceIdx; i < path.length; i++) {
+      const sq = path[i];
+      const p = board[sq];
+      if (p === null) continue; // empty square inside rampage — pass through
+
+      // Friendly royal: whole rampage illegal
+      if (p.color === color && p.slot === 'K') { illegal = true; break; }
+
+      // Enemy armored Behemoth (wall ruling): stop BEFORE this square
+      if (p.color !== color && p.slot === 'R' && RAMPAGE_VS_ARMOR === 'wall' && chebyshev(from, sq) > 2) {
+        if (i === firstPieceIdx) {
+          // The very first capture-entry is a wall — no valid rampage
+          illegal = true;
         } else {
-          pushStd(turns, from, to); // enemy capture
+          // Stop one square before the wall
+          rampageEnd = i - 1;
         }
         break;
       }
-      pushStd(turns, from, to);
-      r += dr; f += df;
-      steps++;
+
+      captures.push(sq);
     }
+
+    if (illegal) continue;
+
+    turns.push({ primary: { type: 'rampage', from, to: path[rampageEnd], captures } });
   }
 }
 
-// Stalker (B-slot, interim): up to 2 squares diagonally; ordinary enemy capture only.
-// S7b: replace with strike-and-return + exhaustion.
+// Stalker (B-slot): up to 2 squares diagonally. Non-capture moves are normal.
+// Capture = Strike-and-Return: target removed, Stalker stays at `from`. Produces StrikeMove.
+// Exhausted Stalkers (square in state.exhausted) may not capture this turn.
 function addStalkerMoves(state: GameState, from: Square, color: Color, turns: Turn[]): void {
   const board = state.board;
   const rank = from >> 3, file = from & 7;
+  const isExhausted = state.exhausted.includes(from);
 
   for (const [dr, df] of DIAG_DIRS) {
-    let r = rank + dr, f = file + df;
+    let r = rank + dr, f2 = file + df;
     let steps = 0;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 2) {
-      const to = r * 8 + f;
+    while (r >= 0 && r <= 7 && f2 >= 0 && f2 <= 7 && steps < 2) {
+      const to = r * 8 + f2;
       const tp = board[to];
       if (tp) {
-        if (tp.color !== color) pushStd(turns, from, to);
-        break;
+        if (tp.color !== color && !isExhausted) {
+          // Strike and Return: capture target, Stalker stays at from
+          turns.push({ primary: { type: 'strike', from, target: to } });
+        }
+        break; // blocked — cannot pass through pieces
       }
-      pushStd(turns, from, to);
-      r += dr; f += df;
+      pushStd(turns, from, to); // non-capture diagonal move
+      r += dr; f2 += df;
       steps++;
     }
   }
@@ -211,26 +268,45 @@ function wildAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         }
         break;
       }
-      case 'R': { // Behemoth: up to 3 squares orthogonally (interim; same for S7b)
+      case 'R': {
+        // Behemoth: rampage-aware threat. Mark every square in the rampage run.
+        // Continue through pieces (rampage captures them) EXCEPT:
+        //   - Stop (don't add) at a friendly royal (rampage would be illegal)
+        //   - Stop (don't add) before an out-of-range enemy Behemoth (armor wall)
+        // Enemy royals are NOT blocking: their square is threatened (rampage check).
         for (const [dr, df] of ORTHO_DIRS) {
           let r = rank + dr, f = file + df;
           let steps = 0;
           while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 3) {
-            attacked.add(r * 8 + f);
-            if (board[r * 8 + f]) break;
+            const sq = r * 8 + f;
+            const p = board[sq];
+            if (p) {
+              // Friendly royal: rampage through this is illegal — stop without adding
+              if (p.color === byColor && p.slot === 'K') break;
+              // Enemy armored Behemoth (wall): stop BEFORE this square
+              if (p.color !== byColor && p.slot === 'R' && RAMPAGE_VS_ARMOR === 'wall' && chebyshev(from, sq) > 2) break;
+              // Any other piece (friendly non-royal, enemy non-armor-wall): mark attacked, rampage continues
+              attacked.add(sq);
+            } else {
+              attacked.add(sq);
+            }
             r += dr; f += df;
             steps++;
           }
         }
         break;
       }
-      case 'B': { // Stalker: up to 2 squares diagonally (interim; same for S7b)
+      case 'B': {
+        // Stalker: exhausted Stalker contributes NO attacked squares (can't capture this turn).
+        // State-aware: mirrors the same pattern as the 0-Essence Wraith.
+        if (state.exhausted.includes(from)) break;
         for (const [dr, df] of DIAG_DIRS) {
           let r = rank + dr, f = file + df;
           let steps = 0;
           while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 2) {
-            attacked.add(r * 8 + f);
-            if (board[r * 8 + f]) break;
+            const sq = r * 8 + f;
+            attacked.add(sq);
+            if (board[sq]) break; // blocked at first piece
             r += dr; f += df;
             steps++;
           }
@@ -267,10 +343,6 @@ function wildAttackedSquares(state: GameState, byColor: Color): Set<Square> {
   }
 
   return attacked;
-}
-
-function chebyshev(a: Square, b: Square): number {
-  return Math.max(Math.abs((a >> 3) - (b >> 3)), Math.abs((a & 7) - (b & 7)));
 }
 
 const wildThreatModel: ThreatModel = {

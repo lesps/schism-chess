@@ -57,12 +57,11 @@ Done: S3 (Phantom army: piercing Shade, homing Thralls, checkResponseConstraint 
 Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essence accounting)  
 Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `ACCORD_EMPOWERMENT` flag)  
 Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-check, dual-invasion win)  
-Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemoth/Stalker — captureConstraints call site existed from S2/S4)
+Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemoth/Stalker — captureConstraints call site existed from S2/S4)  
+Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-return + exhaustion + state-aware threat)
 
-**S7a open todos for S7b to clear:**
-- `test.todo('rampage — S7b')` in `tests/engine/wild.test.ts` — Behemoth capture triggers continuation in same direction up to 3 total.
-- `test.todo('strike-and-return + exhaustion — S7b')` in `tests/engine/wild.test.ts` — Stalker returns to home square after capture; Exhausted next turn.
-- `it.todo('shade-check vs Twins: piercing check constraint composes with single-check rule')` in `tests/engine/twins.test.ts` — cross-army Phantom/Twins interaction, not S7b's responsibility.
+**Remaining open todo (cross-army, out of S7b scope):**
+- `it.todo('shade-check vs Twins: piercing check constraint composes with single-check rule')` in `tests/engine/twins.test.ts` — cross-army Phantom/Twins interaction, deferred to S8.
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -88,7 +87,7 @@ Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemo
 | `Square`, `Color`, `Army`, `Slot` | `types.ts` |
 | `Piece`, `GameState` | `types.ts` |
 | `Turn`, `PrimaryAction` | `types.ts` |
-| `StandardMove`, `TeleportMove`, `Shatter`, `RallyStep` | `types.ts` |
+| `StandardMove`, `TeleportMove`, `Shatter`, `RampageMove`, `StrikeMove`, `RallyStep` | `types.ts` |
 
 ## Kernel API (frozen — army sessions extend via registries only)
 
@@ -137,11 +136,11 @@ Insufficient-material draw stub returns false (full detection in S8).
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: Wild army rampage/Stalker strike-and-return (S7b); notation; UI; PBM logic.
+Not yet implemented: notation; UI; PBM logic.
 
-## captureConstraints call-site (S4 wired; S7a populates)
+## captureConstraints call-site (S4 wired; S7a populates; S7b extended)
 
-`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for **both** `StandardMove` captures and `TeleportMove` captures. Default: no registered model = no constraint. Wild's `captureConstraints` (S7a) enforces Behemoth Armor: enemy captures of the Behemoth (R-slot) require `Chebyshev(capturerFrom, targetSq) ≤ 2`; friendly captures bypass Armor. Shatter (`type: 'shatter'`) is NOT routed through `captureConstraints` — it removes neighbors directly in `apply.ts`, so it always clears a Behemoth regardless of distance.
+`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for `StandardMove` captures, `TeleportMove` captures, each square in `RampageMove.captures`, and `StrikeMove.target`. Default: no registered model = no constraint. Wild's `captureConstraints` (S7a) enforces Behemoth Armor: enemy captures of the Behemoth (R-slot) require `Chebyshev(capturerFrom, targetSq) ≤ 2`; friendly captures bypass Armor. Shatter (`type: 'shatter'`) is NOT routed through `captureConstraints` — it removes neighbors directly in `apply.ts`, so it always clears a Behemoth regardless of distance.
 
 ## lastTurnMeta (added S4)
 
@@ -191,3 +190,22 @@ Registered as both generator and ThreatModel for army `'Twins'`.
 - `apply.ts`: Shatter action handling; rally application after all primary types.
 - `legality.ts`: `rallyEq()` helper; Shatter matching in `applyTurn`'s legality check.
 - `status.ts`: Beyond-midline invasion semantics (`row >= 4` for White, `row <= 3` for Black, K-slot only); Twins dual-invasion branch.
+
+## Wild army (`src/engine/wild.ts`) — complete as of S7b
+
+Registered as both generator and ThreatModel for army `'Wild'`.
+
+**Apex** (Q-slot): chancellor — Rook slides OR Knight jumps. Captures normally (enemy only).
+
+**Behemoth** (R-slot): up to 3 squares orthogonally; may capture friendly pieces (not own royal).  
+**Rampage** (`RampageMove`): on any capture, must continue to max distance (3 from origin or board edge), clearing every piece in the path (friendly and enemy). Stops before an out-of-range enemy armored Behemoth (`RAMPAGE_VS_ARMOR = 'wall'`; pieces before the wall are still captured). Illegal if the path crosses a friendly royal. Threat model uses the same wall-truncation: an armored Behemoth outside Chebyshev 2 blocks the threat line before it, so it can body-block a rampage check.  
+**`RAMPAGE_VS_ARMOR = 'wall'`** (module constant in `wild.ts`): resolved ruling. Alternative `'illegal-move'` documented in comment.
+
+**Stalker** (B-slot): up to 2 squares diagonally.  
+**Strike-and-Return** (`StrikeMove`): on capture, target is removed and Stalker stays at home square (`from`). `type: 'strike'` in `PrimaryAction`.  
+**Exhaustion**: after a strike, the Stalker's home square is added to `state.exhausted`. On the controller's next turn, the exhausted Stalker may not capture (non-capture diagonal moves still allowed). Exhaustion is cleared from `state.exhausted` at the end of the controller's next turn. **Exhausted Stalker contributes NO attacked squares** (state-aware threat, same pattern as 0-Essence Wraith) — a royal in its diagonal range is NOT in check during the exhaustion window.  
+**S8 note**: exhausted-Stalker-gives-no-check interpretation is confirmed. Record in RULES-INTERPRETATIONS.md at S8.
+
+**Bronco** (N-slot): standard Knight; may capture friendly pieces, never own royal.
+
+**Armor** (captureConstraints, already S7a): enemy pieces may capture a Behemoth only from within Chebyshev 2 of its square. Friendly captures bypass Armor. Applied to `StandardMove`, `TeleportMove`, `RampageMove` (each captured square), and `StrikeMove` (target square) in `legality.ts`.
