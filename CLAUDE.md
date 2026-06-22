@@ -18,7 +18,7 @@ src/pbm/       # Pure TS — play-by-post logic (placeholder)
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
-docs/          # RULES.md (canonical ruleset, v2.0.1)
+docs/          # RULES.md (canonical ruleset, v2.0.1); RULES-INTERPRETATIONS.md (judgment calls)
 ```
 
 ## Engine Purity Rule
@@ -58,10 +58,10 @@ Done: S4 (Veil army: Essence-gated Wraith slide/teleport, teleport Wisps, Essenc
 Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `ACCORD_EMPOWERMENT` flag)  
 Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-check, dual-invasion win)  
 Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemoth/Stalker — captureConstraints call site existed from S2/S4)  
-Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-return + exhaustion + state-aware threat)
+Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-return + exhaustion + state-aware threat)  
+Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispatch, blocked-pawn semantics, shade-check-vs-Twins todo resolved, 21-matchup × 50-game property suite, `docs/RULES-INTERPRETATIONS.md`) — **engine feature-complete**
 
-**Remaining open todo (cross-army, out of S7b scope):**
-- `it.todo('shade-check vs Twins: piercing check constraint composes with single-check rule')` in `tests/engine/twins.test.ts` — cross-army Phantom/Twins interaction, deferred to S8.
+**No remaining engine todos.**
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -128,7 +128,7 @@ type GameStatus =
 Invasion: White wins when a K-slot royal reaches **row index ≥ 4** (rank 5+); Black wins on **row index ≤ 3** (rank 4−). Beyond-midline semantics: any row past the threshold counts, not just the exact row. Only K-slot pieces trigger invasion (Q/R/B/N/P past the midline do not).  
 Twins special case: BOTH Warlords must be past the midline simultaneously, and neither may be in check at that moment.  
 Stalemate = loss for the stalemated side.  
-Insufficient-material draw stub returns false (full detection in S8).
+Insufficient-material draw stub returns false (full detection deferred past S8; stub is intentional).
 
 ## positionKeys convention
 

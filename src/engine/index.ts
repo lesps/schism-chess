@@ -29,7 +29,7 @@ export { positionKey } from './positionKey';
 export type { ThreatModel } from './threat';
 export { registerThreatModel, getThreatModel, fideThreatModel } from './threat';
 
-export { registerGenerator, fideGenerator } from './movegen';
+export { registerGenerator, fideGenerator, availablePromotions } from './movegen';
 export { THRALL_HOMING_TWINS } from './phantom';
 
 // Army registrations (side-effect imports)

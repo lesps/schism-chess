@@ -1,7 +1,7 @@
 import type { Color, GameState, Slot, Square, StandardMove, Turn } from './types';
 import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
-import { registerGenerator } from './movegen';
+import { registerGenerator, availablePromotions } from './movegen';
 
 // Tuning knob: 'king-step' is the conservative default (Empowered pieces gain a
 // one-square move-or-capture in any direction). 'queen' upgrades the bonus to full
@@ -24,11 +24,12 @@ function pushMove(turns: Turn[], from: Square, to: Square, promo?: Slot): void {
   turns.push({ primary: mv });
 }
 
-// Find the Herald square (Q-slot) for a given color, or null if captured.
+// Find the Herald square (Q-slot, non-promoted) for a given color, or null if captured.
+// A promoted FIDE Queen at Q-slot is not the Herald and does not define the Banner.
 function findHerald(board: GameState['board'], color: Color): Square | null {
   for (let sq = 0; sq < 64; sq++) {
     const p = board[sq];
-    if (p && p.color === color && p.slot === 'Q') return sq;
+    if (p && p.color === color && p.slot === 'Q' && !p.promoted) return sq;
   }
   return null;
 }
@@ -172,10 +173,11 @@ function addPawnMoves(state: GameState, sq: Square, color: Color, turns: Turn[])
   const startRank = color === 'W' ? 1 : 6;
   const promoRank = color === 'W' ? 7 : 0;
 
+  const promos = availablePromotions(state, color);
   const push1 = sq + dir * 8;
   if (push1 >= 0 && push1 < 64 && !board[push1]) {
     if ((push1 >> 3) === promoRank) {
-      for (const p of ['Q', 'R', 'B', 'N'] as Slot[]) pushMove(turns, sq, push1, p);
+      for (const p of promos) pushMove(turns, sq, push1, p);
     } else {
       pushMove(turns, sq, push1);
       if (rank === startRank) {
@@ -192,7 +194,7 @@ function addPawnMoves(state: GameState, sq: Square, color: Color, turns: Turn[])
     const target = board[capSq];
     if (target && target.color !== color) {
       if ((capSq >> 3) === promoRank) {
-        for (const p of ['Q', 'R', 'B', 'N'] as Slot[]) pushMove(turns, sq, capSq, p);
+        for (const p of promos) pushMove(turns, sq, capSq, p);
       } else {
         pushMove(turns, sq, capSq);
       }
@@ -214,7 +216,14 @@ function accordGenerator(state: GameState): Turn[] {
 
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
-      case 'Q': addHeraldMoves(state, sq, turns); break;
+      case 'Q':
+        if (piece.promoted) {
+          // Promoted FIDE Queen: full Queen sliding with captures; Banner-eligible
+          addEmpoweredSlideMoves(state, sq, color, ALL_DIRS, zone.has(sq), turns);
+        } else {
+          addHeraldMoves(state, sq, turns);
+        }
+        break;
       case 'R': addEmpoweredSlideMoves(state, sq, color, ORTHOGONALS, zone.has(sq), turns); break;
       case 'B': addEmpoweredSlideMoves(state, sq, color, DIAGONALS, zone.has(sq), turns); break;
       case 'N': addEmpoweredKnightMoves(state, sq, color, zone.has(sq), turns); break;
@@ -275,9 +284,17 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
 
     switch (piece.slot) {
       case 'Q':
-        // Herald cannot capture and contributes no threat.
+        if (piece.promoted) {
+          // Promoted FIDE Queen: full sliding attacks; Banner-eligible
+          addSlideAttacks(sq, board, ALL_DIRS, attacked);
+          if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
+        }
+        // else: Herald cannot capture and contributes no threat.
         break;
       case 'P': {
+        // Unified threat principle: blocked 7th-rank pawn → no diagonal threat.
+        const seventhRank = byColor === 'W' ? 6 : 1;
+        if (rank === seventhRank && availablePromotions(state, byColor).length === 0) break;
         const dir = byColor === 'W' ? 1 : -1;
         const r = rank + dir;
         if (r >= 0 && r <= 7) {

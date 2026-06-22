@@ -602,7 +602,56 @@ describe('applyTurn handles Shatter', () => {
 // Cross-army stubs (unimplemented armies or future cross-tests)
 // ---------------------------------------------------------------------------
 describe('cross-army: Shade vs Twins', () => {
-  it.todo('shade-check vs Twins: piercing check constraint composes with single-check rule');
+  it('shade-check vs Twins: piercing check constraint composes with single-check rule', () => {
+    // Phantom's Shade at e8 gives piercing check to Twins Warlord at e4 via clear e-file LOS.
+    // Two constraints compose:
+    //   Piercing-check rule (Phantom): valid responses = royal moves OR Shade capture only.
+    //   Single-check rule (Twins): primary must fully resolve the check (0 Warlords in check after).
+    // Net: only legal primaries are Warlord e4 moves that exit the e-file.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'e4' }, // Warlord 1 — in check from Shade
+      { slot: 'K', color: 'W', at: 'a1' }, // Warlord 2 — safe
+      { slot: 'R', color: 'W', at: 'b5' }, // Rook that could interpose at e5 — but piercing check forbids it
+      { slot: 'Q', color: 'B', at: 'e8' }, // Shade: clear LOS to e4 (e5/e6/e7 all empty)
+      { slot: 'K', color: 'B', at: 'h8' }, // Black King
+    ], { armies: { W: 'Twins', B: 'Phantom' } });
+
+    const turns = legalTurns(state);
+
+    // There are legal responses (not checkmate)
+    expect(turns.length).toBeGreaterThan(0);
+
+    // Interposition (Rook b5→e5) is NOT legal — Shade's piercing check forbids interposition
+    const hasInterpose = turns.some(t => {
+      if (t.primary.type !== 'standard') return false;
+      const mv = t.primary as StandardMove;
+      return mv.from === sq('b5') && mv.to === sq('e5');
+    });
+    expect(hasInterpose).toBe(false);
+
+    // Moving the safe Warlord (a1) is NOT legal — doesn't resolve check on e4 (end-state filter)
+    const movesA1 = turns.some(t => {
+      if (t.primary.type !== 'standard') return false;
+      return (t.primary as StandardMove).from === sq('a1');
+    });
+    expect(movesA1).toBe(false);
+
+    // Moving the checked Warlord off the e-file IS legal (e.g. e4→d4)
+    const hasEscape = turns.some(t => {
+      if (t.primary.type !== 'standard') return false;
+      const mv = t.primary as StandardMove;
+      return mv.from === sq('e4') && mv.to === sq('d4');
+    });
+    expect(hasEscape).toBe(true);
+
+    // ALL legal primary actions are K-slot moves (no non-royal primary actions survive)
+    const nonRoyalPrimaries = turns.filter(t => {
+      if (t.primary.type !== 'standard') return true; // Shatter/etc also blocked, but K-slot only exist here
+      const mv = t.primary as StandardMove;
+      return state.board[mv.from]?.slot !== 'K';
+    });
+    expect(nonRoyalPrimaries.length).toBe(0);
+  });
   it('shatter clears armored Wild Behemoth (bypasses captureConstraints)', () => {
     // Wild Behemoth at e5 adjacent to shattering Warlord at e4.
     // Shatter removes ALL adjacent pieces without invoking captureConstraints — Armor irrelevant.

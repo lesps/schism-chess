@@ -1,7 +1,7 @@
 import type { Color, GameState, Slot, Square, StandardMove, Turn } from './types';
 import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
-import { registerGenerator } from './movegen';
+import { registerGenerator, availablePromotions } from './movegen';
 
 // Provisional ruling: homing move vs Twins is legal if it reduces distance to at least one Warlord.
 export const THRALL_HOMING_TWINS = 'either' as const;
@@ -71,11 +71,17 @@ function addThrallMoves(state: GameState, sq: Square, color: Color, turns: Turn[
   const dir = color === 'W' ? 1 : -1;
   const promoRank = color === 'W' ? 7 : 0;
 
+  const promos = availablePromotions(state, color);
+
+  // A Thrall on the 7th rank with no promotion slots is completely stuck (zero moves).
+  const seventhRank = color === 'W' ? 6 : 1;
+  if (promos.length === 0 && rank === seventhRank) return;
+
   // Forward push (no double push, no en passant)
   const push1 = sq + dir * 8;
   if (push1 >= 0 && push1 < 64 && !board[push1]) {
     if ((push1 >> 3) === promoRank) {
-      for (const p of ['Q', 'R', 'B', 'N'] as Slot[]) pushMove(turns, sq, push1, p);
+      for (const p of promos) pushMove(turns, sq, push1, p);
     } else {
       pushMove(turns, sq, push1);
     }
@@ -89,7 +95,7 @@ function addThrallMoves(state: GameState, sq: Square, color: Color, turns: Turn[
     const target = board[capSq];
     if (target && target.color !== color) {
       if ((capSq >> 3) === promoRank) {
-        for (const p of ['Q', 'R', 'B', 'N'] as Slot[]) pushMove(turns, sq, capSq, p);
+        for (const p of promos) pushMove(turns, sq, capSq, p);
       } else {
         pushMove(turns, sq, capSq);
       }
@@ -128,7 +134,13 @@ function addThrallMoves(state: GameState, sq: Square, color: Color, turns: Turn[
         qualifies = enemyKings.every((_, i) => newDists[i] < currentDists[i]);
       }
 
-      if (qualifies) pushMove(turns, sq, target);
+      if (qualifies) {
+        if ((target >> 3) === promoRank) {
+          for (const p of promos) pushMove(turns, sq, target, p);
+        } else {
+          pushMove(turns, sq, target);
+        }
+      }
     }
   }
 }
@@ -147,7 +159,10 @@ function phantomGenerator(state: GameState): Turn[] {
 
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
-      case 'Q': addSlidingMoves(board, sq, color, ALL_DIRS, false, turns); break; // Shade: no capture
+      case 'Q':
+        // Promoted FIDE Queen captures normally; Shade cannot capture
+        addSlidingMoves(board, sq, color, ALL_DIRS, !!piece.promoted, turns);
+        break;
       case 'R': addSlidingMoves(board, sq, color, ORTHO, true, turns); break;
       case 'B': addSlidingMoves(board, sq, color, DIAGS, true, turns); break;
       case 'N': addKnightMoves(state, sq, color, turns); break;
@@ -177,11 +192,11 @@ function shadeHasLOS(board: GameState['board'], shadeSq: Square, targetSq: Squar
   return true;
 }
 
-// Find the Shade square (Q-slot) for a given color, or null if captured.
+// Find the Shade square (Q-slot, non-promoted) for a given color, or null if captured.
 function findShade(board: GameState['board'], color: Color): Square | null {
   for (let sq = 0; sq < 64; sq++) {
     const p = board[sq];
-    if (p && p.color === color && p.slot === 'Q') return sq;
+    if (p && p.color === color && p.slot === 'Q' && !p.promoted) return sq;
   }
   return null;
 }
@@ -209,7 +224,9 @@ function phantomAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         break;
       }
       case 'P': {
-        // Thrall attacks diagonally forward
+        // Unified threat principle: blocked 7th-rank Thrall has no promotion captures → no diagonal threat.
+        const seventhRank = byColor === 'W' ? 6 : 1;
+        if (rank === seventhRank && availablePromotions(state, byColor).length === 0) break;
         const dir = byColor === 'W' ? 1 : -1;
         const r = rank + dir;
         if (r >= 0 && r <= 7) {
@@ -304,18 +321,27 @@ export const phantomThreatModel: ThreatModel = {
 
     if (!shadeIsChecking) return true; // Shade not in check position; no restriction
 
-    // Shade IS giving check. Only legal responses: move a royal OR capture the Shade.
-    if (turn.primary.type !== 'standard') return false;
-    const mv = turn.primary as StandardMove;
+    // Shade IS giving check. Only legal responses: move a royal OR capture/remove the Shade.
+    if (turn.primary.type === 'standard') {
+      const mv = turn.primary as StandardMove;
+      // Moving a royal
+      const movingPiece = state.board[mv.from];
+      if (movingPiece && movingPiece.slot === 'K') return true;
+      // Capturing the Shade (any piece moving to the Shade's square)
+      if (mv.to === shadeSq) return true;
+      return false; // vetoed: interposition or unrelated move
+    }
 
-    // Moving a royal
-    const movingPiece = state.board[mv.from];
-    if (movingPiece && movingPiece.slot === 'K') return true;
+    if (turn.primary.type === 'shatter') {
+      // Shatter removes all adjacent pieces. If the Shade is adjacent, it is removed.
+      const warlordSq = (turn.primary as import('./types').Shatter).warlordSquare;
+      const dr = Math.abs((shadeSq >> 3) - (warlordSq >> 3));
+      const df = Math.abs((shadeSq & 7) - (warlordSq & 7));
+      if (Math.max(dr, df) <= 1) return true; // Shade adjacent → Shatter removes it
+      return false; // Shade not adjacent → Shatter doesn't resolve check
+    }
 
-    // Capturing the Shade (any piece capturing the Shade's square)
-    if (mv.to === shadeSq) return true;
-
-    return false; // vetoed (interposition or unrelated move)
+    return false; // all other move types vetoed
   },
 };
 

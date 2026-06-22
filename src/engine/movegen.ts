@@ -11,20 +11,59 @@ export function getGenerator(army: Army): MoveGenerator | undefined {
   return generatorRegistry.get(army);
 }
 
-function availablePromotions(state: GameState, color: Color): Slot[] {
+function countPiecesOfSlot(board: GameState['board'], color: Color, slot: Slot): number {
+  let n = 0;
+  for (let i = 0; i < 64; i++) {
+    const p = board[i];
+    if (p && p.color === color && p.slot === slot) n++;
+  }
+  return n;
+}
+
+/**
+ * Available promotion targets for a pawn of `color` in `state`.
+ *
+ * Crown — Royal Abundance: Q always available; R/B/N replacement-only (cap 2 each).
+ * Twins — Q-slot permanently closed (d-file Warlord never dies); R/B/N replacement-only.
+ * All others — replacement-only for all slots: Q cap=1, R/B/N cap=2.
+ *
+ * A slot is open if the current on-board count of pieces at that slot (army pieces AND
+ * previously promoted pieces both count) is below the starting cap.
+ */
+export function availablePromotions(state: GameState, color: Color): Slot[] {
   const army = color === 'W' ? state.armies.W : state.armies.B;
-  if (army !== 'Crown') return ['Q', 'R', 'B', 'N'];
-  // Crown Royal Abundance: Q always available; R/B/N iff on-board count < 2
-  const promos: Slot[] = ['Q'];
-  for (const slot of ['R', 'B', 'N'] as Slot[]) {
-    let count = 0;
-    for (let sq = 0; sq < 64; sq++) {
-      const p = state.board[sq];
-      if (p && p.color === color && p.slot === slot) count++;
+  const board = state.board;
+
+  if (army === 'Crown') {
+    const promos: Slot[] = ['Q']; // Royal Abundance
+    for (const slot of ['R', 'B', 'N'] as Slot[]) {
+      if (countPiecesOfSlot(board, color, slot) < 2) promos.push(slot);
     }
-    if (count < 2) promos.push(slot);
+    return promos;
+  }
+
+  if (army === 'Twins') {
+    // Q-slot permanently closed; only R/B/N
+    const promos: Slot[] = [];
+    for (const slot of ['R', 'B', 'N'] as Slot[]) {
+      if (countPiecesOfSlot(board, color, slot) < 2) promos.push(slot);
+    }
+    return promos;
+  }
+
+  // Phantom, Accord, Veil, Wild — replacement-only for all slots
+  const promos: Slot[] = [];
+  if (countPiecesOfSlot(board, color, 'Q') < 1) promos.push('Q');
+  for (const slot of ['R', 'B', 'N'] as Slot[]) {
+    if (countPiecesOfSlot(board, color, slot) < 2) promos.push(slot);
   }
   return promos;
+}
+
+/** True iff a pawn at `sq` for `color` is stuck on the 7th rank with no open promotion slot. */
+export function isPawnBlocked(state: GameState, sq: Square, color: Color): boolean {
+  const seventhRank = color === 'W' ? 6 : 1;
+  return (sq >> 3) === seventhRank && availablePromotions(state, color).length === 0;
 }
 
 function pushMove(turns: Turn[], from: Square, to: Square, promo?: Slot): void {
