@@ -36,7 +36,23 @@ export interface Shatter {
   warlordSquare: Square;
 }
 
-export type PrimaryAction = StandardMove | TeleportMove | Shatter;
+// Behemoth rampage: one atomic action capturing every piece in a straight line.
+// `captures` lists only non-royal pieces removed (in path order); enemy royals are threats only.
+export interface RampageMove {
+  type: 'rampage';
+  from: Square;
+  to: Square;         // Behemoth's final landing square
+  captures: Square[]; // squares cleared (friendly + enemy non-royal pieces)
+}
+
+// Stalker strike-and-return: target piece removed, Stalker stays at `from`.
+export interface StrikeMove {
+  type: 'strike';
+  from: Square;   // Stalker's home square (returns here after capture)
+  target: Square; // square of the captured piece
+}
+
+export type PrimaryAction = StandardMove | TeleportMove | Shatter | RampageMove | StrikeMove;
 
 export interface RallyStep {
   from: Square;
