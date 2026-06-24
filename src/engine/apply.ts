@@ -72,7 +72,7 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     halfmoveClock = (piece.slot === 'P' || isCapture) ? 0 : halfmoveClock + 1;
 
     board[from] = null;
-    board[to] = promotion ? { slot: promotion, color: piece.color } : piece;
+    board[to] = promotion ? { slot: promotion, color: piece.color, promoted: true } : piece;
 
     if (isEnPassant) {
       const epPawn: Square = moverColor === 'W' ? to - 8 : to + 8;

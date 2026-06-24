@@ -15,6 +15,8 @@ export type Slot = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
 export interface Piece {
   slot: Slot;
   color: Color;
+  /** True for pieces that reached their slot via promotion (behave as standard FIDE, no army abilities). */
+  promoted?: true;
 }
 
 export interface StandardMove {

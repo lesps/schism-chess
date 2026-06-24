@@ -1,7 +1,7 @@
 import type { Color, GameState, Shatter, Slot, Square, StandardMove, Turn, RallyStep } from './types';
 import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
-import { registerGenerator } from './movegen';
+import { registerGenerator, availablePromotions } from './movegen';
 
 const ALL_DIRS = [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]] as const;
 const DIAG_DIRS = [[-1,-1],[-1,1],[1,-1],[1,1]] as const;
@@ -82,7 +82,7 @@ function addPawnPrimaries(state: GameState, from: Square, color: Color, out: Tur
   const dir = color === 'W' ? 1 : -1;
   const startRank = color === 'W' ? 1 : 6;
   const promoRank = color === 'W' ? 7 : 0;
-  const promos: Slot[] = ['Q', 'R', 'B', 'N'];
+  const promos = availablePromotions(state, color); // Twins: never Q
 
   const push1 = from + dir * 8;
   if (push1 >= 0 && push1 < 64 && !board[push1]) {
@@ -257,6 +257,9 @@ function twinsAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         break;
       }
       case 'P': {
+        // Unified threat principle: blocked 7th-rank pawn → no diagonal threat.
+        const seventhRank = byColor === 'W' ? 6 : 1;
+        if (rank === seventhRank && availablePromotions(state, byColor).length === 0) break;
         const dir = byColor === 'W' ? 1 : -1;
         const r = rank + dir;
         if (r >= 0 && r <= 7) {

@@ -1,4 +1,5 @@
 import type { Army, Color, GameState, Square, Turn } from './types';
+import { availablePromotions } from './movegen';
 
 export interface ThreatModel {
   attackedSquares(state: GameState, byColor: Color): Set<Square>;
@@ -54,6 +55,9 @@ export function fideAttackedSquares(state: GameState, byColor: Color): Set<Squar
 
     switch (piece.slot) {
       case 'P': {
+        // Unified threat principle: blocked 7th-rank pawn → no diagonal threat.
+        const seventhRank = byColor === 'W' ? 6 : 1;
+        if (rank === seventhRank && availablePromotions(state, byColor).length === 0) break;
         const dir = piece.color === 'W' ? 1 : -1;
         const r = rank + dir;
         if (r >= 0 && r <= 7) {

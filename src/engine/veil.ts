@@ -1,7 +1,7 @@
 import type { Color, GameState, Slot, Square, Turn } from './types';
 import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
-import { registerGenerator } from './movegen';
+import { registerGenerator, availablePromotions } from './movegen';
 
 const ALL_DIRS = [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]] as const;
 
@@ -67,6 +67,25 @@ function addWispMoves(state: GameState, sq: Square, _color: Color, turns: Turn[]
   }
 }
 
+// Promoted FIDE Rook: standard orthogonal slides with captures.
+function addRookSlideMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
+  const board = state.board;
+  const rank = sq >> 3, file = sq & 7;
+  for (const [dr, df] of [[-1,0],[1,0],[0,-1],[0,1]] as const) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      const tp = board[target];
+      if (tp) {
+        if (tp.color !== color) pushStandard(turns, sq, target);
+        break;
+      }
+      pushStandard(turns, sq, target);
+      r += dr; f += df;
+    }
+  }
+}
+
 function addKingMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
   const rank = sq >> 3, file = sq & 7;
   for (let dr = -1; dr <= 1; dr++) {
@@ -119,10 +138,11 @@ function addPawnMoves(state: GameState, sq: Square, color: Color, turns: Turn[])
   const startRank = color === 'W' ? 1 : 6;
   const promoRank = color === 'W' ? 7 : 0;
 
+  const promos = availablePromotions(state, color);
   const push1 = sq + dir * 8;
   if (push1 >= 0 && push1 < 64 && !board[push1]) {
     if ((push1 >> 3) === promoRank) {
-      for (const p of ['Q', 'R', 'B', 'N'] as Slot[]) pushStandard(turns, sq, push1, p);
+      for (const p of promos) pushStandard(turns, sq, push1, p);
     } else {
       pushStandard(turns, sq, push1);
       if (rank === startRank) {
@@ -139,7 +159,7 @@ function addPawnMoves(state: GameState, sq: Square, color: Color, turns: Turn[])
     const target = board[capSq];
     if (target && target.color !== color) {
       if ((capSq >> 3) === promoRank) {
-        for (const p of ['Q', 'R', 'B', 'N'] as Slot[]) pushStandard(turns, sq, capSq, p);
+        for (const p of promos) pushStandard(turns, sq, capSq, p);
       } else {
         pushStandard(turns, sq, capSq);
       }
@@ -161,7 +181,13 @@ function veilGenerator(state: GameState): Turn[] {
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
       case 'Q': addWraithMoves(state, sq, color, turns); break;
-      case 'R': addWispMoves(state, sq, color, turns); break;
+      case 'R':
+        if (piece.promoted) {
+          addRookSlideMoves(state, sq, color, turns);
+        } else {
+          addWispMoves(state, sq, color, turns);
+        }
+        break;
       case 'B': addBishopMoves(state, sq, color, turns); break;
       case 'N': addKnightMoves(state, sq, color, turns); break;
       case 'P': addPawnMoves(state, sq, color, turns); break;
@@ -201,7 +227,18 @@ function veilAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         break;
       }
       case 'R': {
-        // Wisp: physically occupies space but does not attack; gives no check
+        if (piece.promoted) {
+          // Promoted FIDE Rook: standard orthogonal attacks
+          for (const [dr, df] of [[-1,0],[1,0],[0,-1],[0,1]] as const) {
+            let r = rank + dr, f = file + df;
+            while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+              attacked.add(r * 8 + f);
+              if (board[r * 8 + f]) break;
+              r += dr; f += df;
+            }
+          }
+        }
+        // else: Wisp — physically occupies space but does not attack; gives no check
         break;
       }
       case 'K': {
@@ -233,6 +270,9 @@ function veilAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         break;
       }
       case 'P': {
+        // Unified threat principle: blocked 7th-rank pawn → no diagonal threat.
+        const seventhRank = byColor === 'W' ? 6 : 1;
+        if (rank === seventhRank && availablePromotions(state, byColor).length === 0) break;
         const dir = byColor === 'W' ? 1 : -1;
         const r = rank + dir;
         if (r >= 0 && r <= 7) {
