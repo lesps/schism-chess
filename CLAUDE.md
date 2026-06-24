@@ -59,7 +59,8 @@ Done: S5 (Accord army: Herald + Banner aura, empowerment-aware threat model, `AC
 Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-check, dual-invasion win)  
 Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemoth/Stalker — captureConstraints call site existed from S2/S4)  
 Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-return + exhaustion + state-aware threat)  
-Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispatch, blocked-pawn semantics, shade-check-vs-Twins todo resolved, 21-matchup × 50-game property suite, `docs/RULES-INTERPRETATIONS.md`) — **engine feature-complete**
+Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispatch, blocked-pawn semantics, shade-check-vs-Twins todo resolved, 21-matchup × 50-game property suite, `docs/RULES-INTERPRETATIONS.md`) — **engine feature-complete**  
+Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `replayGame`; full round-trip property suite 21 matchups; game fixtures; Thrall homing `P`-prefix notation; Veil `(E:n→m)` essence annotation; Wild `~` exhaustion; Twins rally `;K...` and Shatter `K@sq`)
 
 **No remaining engine todos.**
 
@@ -88,6 +89,13 @@ Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispa
 | `Piece`, `GameState` | `types.ts` |
 | `Turn`, `PrimaryAction` | `types.ts` |
 | `StandardMove`, `TeleportMove`, `Shatter`, `RampageMove`, `StrikeMove`, `RallyStep` | `types.ts` |
+| `ParseError`, `ReplayError`, `GameRecord` | `notation.ts` |
+| `isParseError(x): x is ParseError` | `notation.ts` |
+| `turnToSan(state, turn): string` | `notation.ts` |
+| `sanToTurn(state, san): Turn \| ParseError` | `notation.ts` |
+| `serializeGame(record): string` | `notation.ts` |
+| `parseGame(text): GameRecord \| ParseError` | `notation.ts` |
+| `replayGame(record): { finalState } \| ReplayError` | `notation.ts` |
 
 ## Kernel API (frozen — army sessions extend via registries only)
 

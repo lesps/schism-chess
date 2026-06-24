@@ -44,3 +44,13 @@ export { applyTurnUnchecked } from './apply';
 
 export type { GameStatus } from './status';
 export { gameStatus } from './status';
+
+export type { ParseError, ReplayError, GameRecord } from './notation';
+export {
+  isParseError,
+  turnToSan,
+  sanToTurn,
+  serializeGame,
+  parseGame,
+  replayGame,
+} from './notation';

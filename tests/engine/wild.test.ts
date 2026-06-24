@@ -949,23 +949,8 @@ describe('Rampage × Armor', () => {
     // Hmm. Let me do this differently.
     //
     // The test: an out-of-range enemy armored Behemoth blocks a rampage-check threat.
-    // White Behemoth at a4. Path going right: b4(empty), c4(enemy pawn), d4(enemy arm.Beh, dist=3).
-    // Rampage threat without armor wall: b4,c4,d4 (max 3). Black king at d4 would be in check.
-    // With armor wall: rampage stops before d4 → d4 NOT threatened → king NOT in check.
-    const board = buildBoard([
-      { slot: 'K', color: 'W', at: 'a1' },
-      { slot: 'R', color: 'W', at: 'a4' },  // White Behemoth (rampager)
-      { slot: 'P', color: 'B', at: 'c4' },  // enemy pawn in path
-      { slot: 'R', color: 'B', at: 'd4' },  // enemy armored Behemoth (wall; chebyshev(a4,d4)=3)
-      { slot: 'K', color: 'B', at: 'd4' },  // WAIT: can't have two pieces on same square
-    ]);
-    // Use different squares: king AT the Behemoth location doesn't work.
-    // Fixture: White Beh at a4. Path right: b4(pawn B), c4(arm.Beh B, dist=2), d4(king B).
-    // chebyshev(a4,c4) = 2 ≤ 2 → c4 is NOT a wall (within range, would be captured).
-    // Try: White Beh at a4; b4=empty, c4=enemy pawn, d4=arm.Beh (dist 3>2 WALL), beyond = e4=Black king.
-    // Rampage without wall: b4,c4,d4 (max 3); d4=arm.Beh wall → stops at c4. King at e4 not reached.
-    // But wall only applies at d4 (the arm.Beh), not e4. King at e4 is outside the rampage anyway (> 3 sq).
-    // Let me just confirm the threat model correctly excludes d4 due to wall (so d4-square NOT attacked).
+    // White Beh at a4; b4=empty, c4=enemy pawn, d4=arm.Beh (dist 3>2 → WALL); king at h8.
+    // Confirm the threat model excludes d4 (wall blocks rampage there) → d4 NOT attacked.
     const board2 = buildBoard([
       { slot: 'K', color: 'W', at: 'a1' },
       { slot: 'R', color: 'W', at: 'a4' },  // White Behemoth
