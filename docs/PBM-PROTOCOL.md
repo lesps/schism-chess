@@ -1,0 +1,287 @@
+# PBM Protocol — Schism Chess v1
+
+**Purpose:** A URL-shareable, tamper-evident, commit-reveal protocol for play-by-mail Schism Chess. This document is the contract; a stranger implementing a compatible server or client from it should produce interoperable results.
+
+---
+
+## 1. Overview
+
+Two players exchange a single opaque string (the *payload*) at each step. No server is required. A future server (see §8) is a thin mailbox that runs validation before accepting. Clients are unchanged above a `Transport` interface.
+
+### Why commit-reveal?
+
+Schism Chess requires simultaneous army selection (RULES.md §2). Without a server, the first mover must commit before the opponent reveals their choice:
+
+1. Creator (`A`) computes `hash = SHA-256(army + ":" + salt)` and sends it in the clear.
+2. Respondent (`B`) picks their army, replies with it in the clear.
+3. `A` reveals `army` and `salt`; everyone verifies `SHA-256(army:salt) == hash`.
+
+The salt prevents `B` from guessing `A`'s army by brute-forcing common army names.
+
+---
+
+## 2. Payload Format
+
+### 2.1 Wire Encoding
+
+Payloads are transmitted as URL-safe strings produced by:
+
+```
+wire_string = lz-string.compressToEncodedURIComponent(JSON.stringify(payload))
+```
+
+Decoding:
+
+```
+json_text = lz-string.decompressFromEncodedURIComponent(wire_string)
+payload   = JSON.parse(json_text)
+```
+
+The resulting wire string contains only characters safe for use as a URL fragment or query parameter without percent-encoding (`[A-Za-z0-9\-_.!~*'()]`). A 60-ply game encodes to roughly 500–600 characters.
+
+### 2.2 JSON Structure
+
+```jsonc
+{
+  "v": 1,                           // protocol version — always 1 for this spec
+  "gameId": "<uuidv4>",             // minted at creation; permanent identifier
+  "phase": "commit",                // see §3
+  "white": { "label": "Spencer" },  // display label; no auth semantics
+  "black": { "label": "Tina" },
+  "commit": {
+    "by": "W",                      // "W" or "B" — the creator's color
+    "hash": "<64 hex chars>"        // SHA-256(army + ":" + salt)
+  },
+  "armies": {                       // populated incrementally
+    "W": "Phantom",                 // set when W's army is revealed
+    "B": "Crown"                    // set when B's army is chosen
+  },
+  "reveal": {                       // present from play phase onward
+    "army": "Phantom",
+    "salt": "<32 hex chars>"        // 128-bit entropy; kept locally until reveal
+  },
+  "moves": ["f3", "e5", "g4", "Qh4#"],  // flat array of SAN strings, one per ply
+  "result": null                    // null | "1-0" | "0-1" | "1/2-1/2"
+}
+```
+
+#### Fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `v` | `1` | Literal integer 1. Unknown values → *newer-client* error. |
+| `gameId` | UUID string | Stable across all phase transitions. |
+| `phase` | `"commit"` \| `"reveal"` \| `"play"` \| `"finished"` | Strictly forward. |
+| `white.label` | string | Set by creator if playing White; by respondent otherwise. |
+| `black.label` | string | Set by creator if playing Black; by respondent otherwise. |
+| `commit.by` | `"W"` \| `"B"` | Creator's color. Immutable. |
+| `commit.hash` | 64 hex chars | SHA-256 commitment. Immutable. |
+| `armies.W` | Army \| absent | Absent until creator (if W) or respondent (if W) is revealed. |
+| `armies.B` | Army \| absent | Absent until creator (if B) or respondent (if B) is chosen. |
+| `reveal.army` | Army | The creator's army. Must match `armies[commit.by]`. |
+| `reveal.salt` | 32 hex chars | 128-bit entropy. Store locally; never re-derive. |
+| `moves` | `string[]` | Flat per-ply SAN. Index 0 = White's first half-move; index 1 = Black's; etc. |
+| `result` | `null` \| `"1-0"` \| `"0-1"` \| `"1/2-1/2"` | `null` while ongoing. |
+
+**Army values:** `"Crown"`, `"Phantom"`, `"Accord"`, `"Twins"`, `"Veil"`, `"Wild"`.
+
+**SAN format:** Extended algebraic notation per the S9 engine — see `src/engine/notation.ts`.
+Notation conventions: `~` = Stalker strike-and-return; `;Ke2` = Twins rally; `(E:n→m)` = Veil Essence; `##` = invasion checkmate; `K@e1` = Shatter.
+
+---
+
+## 3. Phase Machine
+
+```
+commit → reveal → play → finished
+```
+
+Transitions are strictly forward; no phase may be revisited.
+
+### commit
+
+Produced by `createGame`. Contains the creator's hash but no armies.
+
+### reveal
+
+Produced by `respondToCommit`. The respondent's army is now set (`armies[opposite]`). The committer's army is still hidden.
+
+### play
+
+Produced by `revealArmy`. Both armies are set; `reveal.army` and `reveal.salt` are present. `moves` begins empty; `result` is `null`.
+
+### finished
+
+Produced when `appendTurn` detects a terminal game state. `result` is set to `"1-0"`, `"0-1"`, or `"1/2-1/2"`.
+
+---
+
+## 4. Commitment Hash
+
+```
+hash = hex( SHA-256( army + ":" + salt ) )
+```
+
+- `army` — the ASCII Army name (e.g., `"Phantom"`)
+- `:` — literal colon separator
+- `salt` — 32 hex characters (128 bits of entropy); generated by the client; stored locally
+
+Example (Python):
+```python
+import hashlib
+army, salt = "Phantom", "cafebabe" * 4  # 32 hex chars
+h = hashlib.sha256(f"{army}:{salt}".encode()).hexdigest()
+```
+
+**Salt storage:** The salt must be kept by the creator until `revealArmy` is called. This library stores nothing — that is a client responsibility (S13). If the salt is lost, the game cannot proceed past the reveal phase.
+
+---
+
+## 5. Moves Array
+
+Moves are stored as a flat array of half-moves (plies) in play order:
+
+```
+index 0 = White ply 1
+index 1 = Black ply 1
+index 2 = White ply 2
+...
+```
+
+Conversion to `GameRecord.moves` (for replay) groups consecutive pairs:
+```
+[ white0, black0, white1, black1, ... ]
+→ [ { white: white0, black: black0 }, { white: white1, black: black1 }, ... ]
+```
+
+The last pair may have only a `white` key if the game ended on White's move.
+
+---
+
+## 6. Validation Rules
+
+Every payload received from an untrusted source must be validated before use. Validation is applied in order; the first failure is returned.
+
+### 6.1 Schema + Version
+
+1. The value of `v` is checked first. If `v` is a number other than `1`, return a **newer-client** error (don't claim the payload is malformed — the client is just outdated).
+2. All required fields must be present with correct types and value domains (Army enum, Phase enum, hex length constraints, etc.).
+
+### 6.2 Hash Verification (if `reveal` present)
+
+```
+expected = SHA-256(reveal.army + ":" + reveal.salt)
+assert expected == commit.hash
+assert reveal.army == armies[commit.by]
+```
+
+Both assertions must hold, or return a **hash-mismatch** error.
+
+### 6.3 Move Replay
+
+Convert `moves` to `GameRecord.moves` pairs and call `replayGame(record)`. If any half-move is illegal, return a **replay** error including:
+- `moveNumber` — the full-move number (1-indexed pair index + 1)
+- `side` — `"W"` or `"B"` (which half-move failed)
+- `san` — the offending SAN string
+- `reason` — human-readable explanation
+
+Move replay is skipped if either army is not yet set (commit or reveal phase).
+
+### 6.4 Result Consistency
+
+After replay, derive the expected result from the final position:
+
+| `gameStatus` | Expected payload `result` |
+|---|---|
+| `{ type: 'ongoing' }` | `null` |
+| `{ type: 'win', winner: 'W' }` | `"1-0"` |
+| `{ type: 'win', winner: 'B' }` | `"0-1"` |
+| `{ type: 'draw', ... }` | `"1/2-1/2"` |
+
+Note: all win types (checkmate, invasion, stalemate-loss) map to `"1-0"`/`"0-1"` — the payload does not distinguish win conditions.
+
+### 6.5 Validation Result
+
+On success, the validator returns:
+```ts
+{
+  ok: true,
+  phase: Phase,
+  state: GameState | undefined,   // undefined when armies not fully known
+  record: GameRecord | undefined, // undefined when armies not fully known
+  whoseTurn: Color,               // 'W' when state unavailable
+}
+```
+
+On failure:
+```ts
+{
+  ok: false,
+  error: ValidationError,  // typed: 'newer-client' | 'schema' | 'hash-mismatch' | 'replay' | 'result-mismatch'
+}
+```
+
+---
+
+## 7. Threat Model
+
+### What tampering is detectable
+
+| Attack | Detection |
+|--------|-----------|
+| Illegal move injected | Replay error (§6.3) |
+| Committer changes army at reveal | Hash mismatch (§6.2) |
+| Result forged on ongoing game | Result mismatch (§6.4) |
+| Result changed on finished game | Result mismatch (§6.4) |
+| Respondent's army changed after play starts | Replay error — moves legal for original army are typically illegal for a different army |
+| Piece behavior modified in client | Replay on an honest client produces a different final state |
+
+### What tampering is NOT detectable
+
+| Attack | Mitigation |
+|--------|-----------|
+| **History truncation** — an opponent shares an earlier valid prefix | The receiving client should perform a *monotonic history check*: if `gameId` matches a game in local history, verify that the new payload's `moves` is a prefix extension, never a truncation. This is a client-side invariant (S13 responsibility). |
+| **Game abandonment** — a player stops responding | Out-of-band coordination or a timeout agreed before the game. A future server (§8) can implement heartbeat deadlines. |
+| **Both players collude** | Out of scope; they can trivially agree on a fake result. |
+
+---
+
+## 8. Network Addon
+
+A future server needs only a thin *payload mailbox* keyed by `gameId`. Clients are unchanged above a `Transport` interface:
+
+```ts
+interface Transport {
+  push(gameId: string, encoded: string): Promise<void>;
+  pull(gameId: string): Promise<string | null>;
+}
+```
+
+**Server invariants:**
+1. Before accepting a `push`, the server calls `validatePayload(decode(encoded), hasher)`. Reject on any error.
+2. The server stores only the latest valid payload per `gameId`.
+3. Payloads are append-only: the server verifies that the incoming `moves` array is a strict extension of the stored array (same prefix), preventing history truncation.
+4. The server never interprets move content — it is a dumb validator + relay.
+
+Clients use the same `encodePayload` / `decodePayload` / `validatePayload` functions they already have. No new API surface is required on the client side.
+
+---
+
+## 9. Error Reference
+
+| Error type | Meaning |
+|------------|---------|
+| `newer-client` | `v` field is a number other than 1. Update the client. |
+| `schema` | Required field missing, wrong type, or invalid enum value. |
+| `hash-mismatch` | Revealed army + salt don't reproduce the commitment hash, or `reveal.army` ≠ `armies[commit.by]`. |
+| `replay` | A move in `moves` is illegal when replayed from `initialState(armies)`. Includes move number, side, and reason. |
+| `result-mismatch` | The `result` field doesn't match the actual terminal status of the replayed position. |
+
+---
+
+## 10. Implementation Notes
+
+- **`gameId`**: UUID v4 generated at creation by the client; not required to be globally unique for correctness (it is only used as a mailbox key in S13+).
+- **`salt`**: Clients MUST use cryptographically random 128-bit values (32 hex chars). Using predictable salts (e.g., all-zeros) allows army guessing by brute force.
+- **Hasher injection**: `src/pbm` depends only on `interface Hasher { sha256(s: string): Promise<string> }`. Browser implementation (Web Crypto API) lives in `src/app/`; tests use `node:crypto`.
+- **lz-string**: Version `^1.5.0`. The `compressToEncodedURIComponent` / `decompressFromEncodedURIComponent` pair produces URL-safe output with no further encoding needed.

@@ -14,7 +14,7 @@ npm run test       # Vitest (all suites)
 
 ```
 src/engine/    # Pure TS — no React/DOM/browser imports ever
-src/pbm/       # Pure TS — play-by-post logic (placeholder)
+src/pbm/       # Pure TS — play-by-post logic (S10: types, codec, game flow, validation)
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
@@ -60,7 +60,8 @@ Done: S6 (Twins army: dual Warlords, atomic move+Rally, Shatter, one-action-per-
 Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemoth/Stalker — captureConstraints call site existed from S2/S4)  
 Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-return + exhaustion + state-aware threat)  
 Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispatch, blocked-pawn semantics, shade-check-vs-Twins todo resolved, 21-matchup × 50-game property suite, `docs/RULES-INTERPRETATIONS.md`) — **engine feature-complete**  
-Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `replayGame`; full round-trip property suite 21 matchups; game fixtures; Thrall homing `P`-prefix notation; Veil `(E:n→m)` essence annotation; Wild `~` exhaustion; Twins rally `;K...` and Shatter `K@sq`)
+Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `replayGame`; full round-trip property suite 21 matchups; game fixtures; Thrall homing `P`-prefix notation; Veil `(E:n→m)` essence annotation; Wild `~` exhaustion; Twins rally `;K...` and Shatter `K@sq`)  
+Done: S10 (PBM core: commit-reveal handshake, lz-string URL payloads, full replay validation, tampering tests, `docs/PBM-PROTOCOL.md`)
 
 **No remaining engine todos.**
 
@@ -96,6 +97,25 @@ Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `rep
 | `serializeGame(record): string` | `notation.ts` |
 | `parseGame(text): GameRecord \| ParseError` | `notation.ts` |
 | `replayGame(record): { finalState } \| ReplayError` | `notation.ts` |
+
+## PBM API (`src/pbm/index.ts`)
+
+| Export | Notes |
+|--------|-------|
+| `createGame(label, color, army, salt, hasher)` | Commit-phase payload; hash = SHA-256(army:salt) |
+| `respondToCommit(payload, label, army)` | Reveal-phase payload; respondent picks army |
+| `revealArmy(payload, army, salt, hasher)` | Play-phase payload; verifies hash |
+| `appendTurn(payload, turn)` | Appends SAN; sets result + 'finished' when terminal |
+| `validatePayload(raw, hasher)` | Full pipeline: schema → hash → replay → result |
+| `encodePayload(payload)` | lz-string → URL-safe string |
+| `decodePayload(s)` | Decompress + schema-check → PBMPayload \| { error } |
+| `checkSchema(raw)` | Schema-only check → PBMPayload \| { error } |
+| `Hasher` (interface) | `{ sha256(s): Promise<string> }` — inject browser/node impl |
+| `PBMPayload` (type) | Versioned JSON payload |
+| `Phase`, `PayloadResult` | Phase union; result string type |
+| `ValidationResult`, `ValidationError` | Typed success/failure union |
+
+Protocol doc: `docs/PBM-PROTOCOL.md`
 
 ## Kernel API (frozen — army sessions extend via registries only)
 
