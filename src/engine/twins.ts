@@ -1,4 +1,4 @@
-import type { Color, GameState, Shatter, Slot, Square, StandardMove, Turn, RallyStep } from './types';
+import type { Color, GameState, Shatter, Square, StandardMove, Turn, RallyStep } from './types';
 import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
 import { registerGenerator, availablePromotions } from './movegen';

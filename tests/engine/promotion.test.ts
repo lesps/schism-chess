@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-  legalTurns, applyTurn, applyTurnUnchecked, gameStatus,
+  legalTurns, applyTurnUnchecked, gameStatus,
   algebraicToSquare, availablePromotions,
 } from '../../src/engine/index';
 import type { GameState, Piece, Slot, Color, Turn, StandardMove } from '../../src/engine/index';
@@ -465,16 +465,8 @@ describe('blocked pawn: all promotion slots full', () => {
   });
 
   it('friendly piece on blocked pawn diagonal is NOT defended by it', () => {
-    // White Rook on f8 (on pawn's diagonal). Enemy can capture it freely because
-    // the blocked pawn does not defend f8.
-    const state = phantomFullState([
-      { slot: 'R', color: 'B', at: 'f8' },  // Black attacker
-      // White Rook on f8 would require overriding... let me use g8 instead
-    ]);
-    // Actually, let me set up: White piece on h8 (the pawn's other diagonal)
-    // The Black side should be able to capture it without the pawn defending it.
-    // To simplify: check that legalTurns for Black includes capturing h8
-    // after we place a capturable White piece there.
+    // White piece on h8 (on pawn's diagonal). Enemy can capture it freely because
+    // the blocked pawn does not defend h8.
     // Use a fresh state with a White Knight on h8 and enemy can capture it.
     const state2 = makeState('Phantom', 'Crown', [
       { slot: 'K', color: 'W', at: 'a1' },
