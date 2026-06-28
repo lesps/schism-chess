@@ -18,13 +18,25 @@
   --sq-dark: #7b5535;
 
   /* Board highlights */
-  --hl-selected: rgba(250, 220, 40, 0.60);
-  --hl-from:     rgba(250, 220, 40, 0.25);
-  --hl-to:       rgba(250, 220, 40, 0.40);
-  --hl-check:    rgba(210, 40, 40, 0.60);
-  --hl-dot:      rgba(20, 200, 80, 0.75);
-  --hl-capture:  rgba(210, 50, 50, 0.45);
-  --hl-special:  rgba(100, 120, 255, 0.50);
+  --hl-selected:          rgba(250, 220, 40, 0.60);
+  --hl-from:              rgba(250, 220, 40, 0.25);
+  --hl-to:                rgba(250, 220, 40, 0.40);
+  --hl-check:             rgba(210, 40, 40, 0.60);
+  --hl-dot:               rgba(20, 200, 80, 0.75);
+  --hl-capture:           rgba(210, 50, 50, 0.45);
+  --hl-special:           rgba(100, 120, 255, 0.50);
+  /* S12 additions */
+  --hl-teleport-dot:      rgba(180, 80, 255, 0.80);
+  --hl-teleport-capture:  rgba(180, 80, 255, 0.50);
+  --hl-homing:            rgba(255, 165, 0, 0.80);
+  --hl-friendly-capture:  rgba(255, 200, 0, 0.55);
+  --hl-rally:             rgba(240, 100, 120, 0.70);
+  --hl-invaded:           rgba(80, 220, 80, 0.25);
+  /* Overlay zones */
+  --overlay-banner:  rgba(100, 220, 160, 0.08);
+  --overlay-armor:   rgba(240, 160, 60, 0.10);
+  --overlay-blast:   rgba(220, 60, 60, 0.18);
+  --overlay-rally-from: rgba(240, 100, 120, 0.18);
 
   /* Army piece colors — W = bright, B = muted/darker */
   --army-Crown-W:   #f5d660;
@@ -423,6 +435,95 @@ body {
   pointer-events: none;
 }
 
+/* Teleport: dashed dot / dashed ring */
+.board-sq.hl-teleport-move::after {
+  content: '';
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: var(--hl-teleport-dot);
+  pointer-events: none;
+  outline: 2px dashed var(--hl-teleport-dot);
+  outline-offset: 3px;
+}
+
+.board-sq.hl-teleport-capture::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  border: 3px dashed var(--hl-teleport-capture);
+  pointer-events: none;
+}
+
+/* Homing move (Phantom Thrall): orange dot */
+.board-sq.hl-homing::after {
+  content: '';
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: var(--hl-homing);
+  pointer-events: none;
+  box-shadow: 0 0 4px var(--hl-homing);
+}
+
+/* Friendly capture (Wild Bronco): amber ring */
+.board-sq.hl-friendly-capture::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 4px var(--hl-friendly-capture);
+  pointer-events: none;
+}
+
+/* Rally destination (Twins staging): red dot */
+.board-sq.hl-rally::after {
+  content: '';
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: var(--hl-rally);
+  pointer-events: none;
+}
+
+/* Zone overlays: use ::before with the zone color. Since ::before is also used for
+   hl-selected / hl-check / hl-last-from / hl-last-to, the overlay is just a tint
+   when no priority highlight applies. Priority highlights override it. */
+.board-sq.overlay-banner:not(.hl-selected):not(.hl-check):not(.hl-last-from):not(.hl-last-to)::before {
+  background: var(--overlay-banner);
+}
+.board-sq.overlay-armor:not(.hl-selected):not(.hl-check):not(.hl-last-from):not(.hl-last-to)::before {
+  background: var(--overlay-armor);
+}
+.board-sq.overlay-blast:not(.hl-selected):not(.hl-check):not(.hl-last-from):not(.hl-last-to)::before {
+  background: var(--overlay-blast);
+}
+.board-sq.overlay-rally-from:not(.hl-selected):not(.hl-check):not(.hl-last-from):not(.hl-last-to)::before {
+  background: var(--overlay-rally-from);
+}
+
+/* Invasion progress: subtle green tint on crossed royals */
+.board-sq.hl-invaded::before {
+  background: var(--hl-invaded);
+}
+
+/* Midline marker (between rank 4 and rank 5 = 50% of board height) */
+.board-wrapper::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+  z-index: 3;
+}
+
 /* Coordinate labels */
 .coord {
   position: absolute;
@@ -701,6 +802,213 @@ body {
   flex-direction: column;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* ─── Piece badges (S12: empowered / exhausted) ─── */
+.piece-badge {
+  position: absolute;
+  font-size: 0.38em;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.piece-badge-empowered {
+  top: -0.1em;
+  right: -0.1em;
+  color: #6ddba0;
+  text-shadow: 0 0 3px rgba(109, 219, 160, 0.8);
+}
+
+.piece-badge-exhausted {
+  bottom: -0.1em;
+  right: -0.1em;
+  color: #f07878;
+  opacity: 0.9;
+}
+
+/* ─── Hint bar ─── */
+.hint-bar {
+  flex: 0 0 auto;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Shatter bar (shown when Warlord selected) ─── */
+.shatter-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--army-Twins) 8%, var(--elevated));
+  border-bottom: 1px solid var(--border);
+}
+
+.shatter-btn {
+  background: color-mix(in srgb, var(--army-Twins) 20%, var(--elevated));
+  border: 1px solid var(--army-Twins);
+  color: var(--army-Twins);
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.shatter-btn:active { opacity: 0.7; }
+
+.shatter-bar-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Rally bar (shown during Twins staging) ─── */
+.rally-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--army-Twins) 8%, var(--elevated));
+  border-bottom: 1px solid var(--border);
+}
+
+.rally-bar-hint {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ─── Preview overlay (Shatter / Rampage) ─── */
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 110;
+  animation: fade-in 100ms ease;
+}
+
+.preview-sheet {
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 20px 16px 32px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: slide-up 180ms ease;
+}
+
+.preview-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.preview-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.preview-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.preview-captures {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.preview-capture-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--elevated);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.preview-capture-item.friendly-warning {
+  background: color-mix(in srgb, #f07878 12%, var(--elevated));
+  border: 1px solid color-mix(in srgb, #f07878 40%, transparent);
+}
+
+.preview-glyph {
+  font-size: 20px;
+  font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Chess', serif;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.preview-coord {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-muted);
+  font-size: 12px;
+  min-width: 26px;
+}
+
+.preview-piece-name {
+  flex: 1;
+  color: var(--text-dim);
+}
+
+.preview-warning {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #f07878;
+  background: color-mix(in srgb, #f07878 15%, transparent);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.preview-actions .btn { flex: 1; }
+
+/* ─── Essence tick animation (S12) ─── */
+.essence-tick {
+  font-size: 12px;
+  font-weight: 700;
+  animation: essence-tick-anim 1.2s ease forwards;
+  pointer-events: none;
+}
+
+.essence-tick.gain { color: #6ddba0; }
+.essence-tick.loss { color: #f07878; }
+
+@keyframes essence-tick-anim {
+  0%   { opacity: 1; transform: translateY(0); }
+  60%  { opacity: 1; transform: translateY(-8px); }
+  100% { opacity: 0; transform: translateY(-12px); }
 }
 
 /* ─── Animations ─── */

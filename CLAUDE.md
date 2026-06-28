@@ -63,7 +63,8 @@ Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-r
 Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispatch, blocked-pawn semantics, shade-check-vs-Twins todo resolved, 21-matchup × 50-game property suite, `docs/RULES-INTERPRETATIONS.md`) — **engine feature-complete**  
 Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `replayGame`; full round-trip property suite 21 matchups; game fixtures; Thrall homing `P`-prefix notation; Veil `(E:n→m)` essence annotation; Wild `~` exhaustion; Twins rally `;K...` and Shatter `K@sq`)  
 Done: S10 (PBM core: commit-reveal handshake, lz-string URL payloads, full replay validation, tampering tests, `docs/PBM-PROTOCOL.md`)  
-Done: S11 (Board UI + local hotseat: App shell, blind army-pick flow, Board component, GameScreen, chooser sheet, game-end modal, Playwright e2e harness)
+Done: S11 (Board UI + local hotseat: App shell, blind army-pick flow, Board component, GameScreen, chooser sheet, game-end modal, Playwright e2e harness)  
+Done: S12 (Army-special interaction UX: Twins two-phase input + Shatter preview + rally bar, Veil slide/teleport/teleport-capture highlight distinction, Phantom piercing-check hint bar, Accord banner-zone overlay + empowered badge, Wild rampage preview + exhausted-Stalker badge + armor radius overlay, midline marker, invasion progress tint, `src/ui/strings.ts`, `docs/checklists/S12-manual.md`, 5-army Playwright e2e suite)
 
 **No remaining engine todos.**
 

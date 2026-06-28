@@ -1,4 +1,4 @@
-import type { Army, Color, GameState, Piece, Slot, Square, Turn } from '../engine/types';
+import type { Army, Color, GameState, Piece, PrimaryAction, Slot, Square, Turn } from '../engine/types';
 
 // ─── Army metadata ───────────────────────────────────────────────────────────
 
@@ -96,11 +96,25 @@ export function getPrimaryDest(turn: Turn): Square {
   }
 }
 
-export type HighlightType = 'selected' | 'legal-move' | 'legal-capture' | 'legal-special'
-                          | 'last-from' | 'last-to' | 'check';
+export type DestHighlightType =
+  | 'legal-move'
+  | 'legal-capture'
+  | 'legal-special'
+  | 'legal-teleport-move'
+  | 'legal-teleport-capture'
+  | 'legal-homing'
+  | 'legal-friendly-capture'
+  | 'legal-rally';
 
-/** Classify a turn's destination highlight: move (empty) | capture | special. */
-export function getDestHighlight(turn: Turn, board: GameState['board']): 'legal-move' | 'legal-capture' | 'legal-special' {
+export type HighlightType = 'selected' | DestHighlightType | 'last-from' | 'last-to' | 'check';
+
+/** Classify a turn's destination highlight. */
+export function getDestHighlight(
+  turn: Turn,
+  board: GameState['board'],
+  moverColor: Color,
+  moverArmy: Army,
+): DestHighlightType {
   const p = turn.primary;
   switch (p.type) {
     case 'shatter':
@@ -110,12 +124,16 @@ export function getDestHighlight(turn: Turn, board: GameState['board']): 'legal-
     case 'rampage':
       return 'legal-special';
     case 'teleport':
-      return p.isCapture ? 'legal-capture' : 'legal-special';
+      return p.isCapture ? 'legal-teleport-capture' : 'legal-teleport-move';
     case 'standard': {
       const target = board[p.to];
-      if (target) return 'legal-capture';
-      // en-passant capture lands on an empty square
-      if (p.promotion === undefined && !target) return 'legal-move';
+      if (target) {
+        return target.color === moverColor ? 'legal-friendly-capture' : 'legal-capture';
+      }
+      // Phantom Thrall homing moves (non-forward empty-square moves)
+      if (moverArmy === 'Phantom' && isThrallHomingMove(turn, board, moverColor)) {
+        return 'legal-homing';
+      }
       return 'legal-move';
     }
   }
@@ -124,23 +142,116 @@ export function getDestHighlight(turn: Turn, board: GameState['board']): 'legal-
 /**
  * Build a map of { square → highlight type } for all legal destinations
  * of turns originating from the selected square.
- * Priority: legal-capture > legal-special > legal-move
+ * Priority: capture > friendly-capture > special > teleport-capture > homing > move > teleport-move > rally
  */
 export function buildHighlightMap(
   turns: Turn[],
   board: GameState['board'],
-): Map<Square, 'legal-move' | 'legal-capture' | 'legal-special'> {
-  const priority = { 'legal-capture': 2, 'legal-special': 1, 'legal-move': 0 } as const;
-  const map = new Map<Square, 'legal-move' | 'legal-capture' | 'legal-special'>();
+  moverColor: Color,
+  moverArmy: Army,
+): Map<Square, DestHighlightType> {
+  const priority: Record<DestHighlightType, number> = {
+    'legal-capture':           7,
+    'legal-friendly-capture':  6,
+    'legal-special':           5,
+    'legal-teleport-capture':  4,
+    'legal-homing':            3,
+    'legal-move':              2,
+    'legal-teleport-move':     1,
+    'legal-rally':             0,
+  };
+  const map = new Map<Square, DestHighlightType>();
   for (const t of turns) {
     const dest = getPrimaryDest(t);
-    const hl = getDestHighlight(t, board);
+    const hl = getDestHighlight(t, board, moverColor, moverArmy);
     const cur = map.get(dest);
     if (cur === undefined || priority[hl] > priority[cur]) {
       map.set(dest, hl);
     }
   }
   return map;
+}
+
+/** Determine whether a StandardMove from a Phantom Thrall is a homing move (non-forward empty-square move). */
+export function isThrallHomingMove(turn: Turn, board: GameState['board'], moverColor: Color): boolean {
+  const p = turn.primary;
+  if (p.type !== 'standard') return false;
+  const piece = board[p.from];
+  if (!piece || piece.slot !== 'P' || piece.promoted) return false;
+  if (board[p.to] !== null) return false; // captures are not homing
+  const dr = squareRank(p.to) - squareRank(p.from);
+  const df = squareFile(p.to) - squareFile(p.from);
+  const isForwardPush =
+    (moverColor === 'W' && dr === 1 && df === 0) ||
+    (moverColor === 'B' && dr === -1 && df === 0);
+  return !isForwardPush;
+}
+
+/** Compare two PrimaryAction values for structural equality (used for Twins staging). */
+export function primaryEq(a: PrimaryAction, b: PrimaryAction): boolean {
+  if (a.type !== b.type) return false;
+  switch (a.type) {
+    case 'standard':
+      return b.type === 'standard' && a.from === b.from && a.to === b.to && a.promotion === b.promotion;
+    case 'teleport':
+      return b.type === 'teleport' && a.from === b.from && a.to === b.to;
+    case 'shatter':
+      return b.type === 'shatter' && a.warlordSquare === b.warlordSquare;
+    case 'rampage':
+      return b.type === 'rampage' && a.from === b.from && a.to === b.to;
+    case 'strike':
+      return b.type === 'strike' && a.from === b.from && a.target === b.target;
+  }
+}
+
+/** Chebyshev distance between two squares. */
+export function chebyshev(a: Square, b: Square): number {
+  return Math.max(Math.abs(squareRank(a) - squareRank(b)), Math.abs(squareFile(a) - squareFile(b)));
+}
+
+/**
+ * Build a highlight map for rally destinations (during Twins staging phase).
+ * All rally targets get 'legal-rally'.
+ */
+export function buildRallyHighlightMap(stagingTurns: Turn[]): Map<Square, DestHighlightType> {
+  const map = new Map<Square, DestHighlightType>();
+  for (const t of stagingTurns) {
+    if (t.rally) map.set(t.rally.to, 'legal-rally');
+  }
+  return map;
+}
+
+/** Return whether a royal piece has crossed the midline for invasion purposes. */
+export function hasCrossedMidline(sq: Square, color: Color): boolean {
+  const rank = squareRank(sq);
+  return color === 'W' ? rank >= 4 : rank <= 3;
+}
+
+/** Compute Chebyshev-2 "armor zone" squares around a given square (clipped to board). */
+export function armorZone(sq: Square): Set<Square> {
+  const zone = new Set<Square>();
+  const rank = squareRank(sq), file = squareFile(sq);
+  for (let dr = -2; dr <= 2; dr++) {
+    for (let df = -2; df <= 2; df++) {
+      const r = rank + dr, f = file + df;
+      if (r >= 0 && r <= 7 && f >= 0 && f <= 7) zone.add(r * 8 + f);
+    }
+  }
+  return zone;
+}
+
+/** Return neighbors (8-direction adjacents) of a square, clipped to board. */
+export function squareNeighbors(sq: Square): Square[] {
+  const result: Square[] = [];
+  const rank = squareRank(sq), file = squareFile(sq);
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let df = -1; df <= 1; df++) {
+      if (dr === 0 && df === 0) continue;
+      const r = rank + dr, f = file + df;
+      if (r >= 0 && r <= 7 && f >= 0 && f <= 7) result.push(r * 8 + f);
+    }
+  }
+  return result;
 }
 
 // ─── Captures ─────────────────────────────────────────────────────────────────
