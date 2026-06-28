@@ -1,5 +1,33 @@
 # Changelog
 
+## S11 — 2026-06-28
+
+**Board UI, local hotseat, Playwright e2e harness**
+
+- `src/vite-env.d.ts` (new): Vite client types for `import.meta.env.DEV`
+- `src/ui/styles.css` (new): Dark-theme CSS; CSS custom properties per army (`--army-Crown-W`, etc.); board highlight classes (`hl-selected`, `hl-last-from`, `hl-last-to`, `hl-check`, `hl-move`, `hl-capture`, `hl-special`)
+- `src/ui/shared.ts` (new): `ARMY_NAMES`, `ARMY_TAGLINES`, `ARMIES`, `ARMY_ACCENTS`, `getPieceGlyph`, `getPrimaryFrom`, `getPrimaryDest`, `buildHighlightMap`, `extractCaptures`, `boardSquaresInOrder`
+- `src/ui/App.tsx` (updated): Screen router (`home | new-game | game`); `?sfen=` dev-only loader gated by `import.meta.env.DEV`
+- `src/ui/screens/HomeScreen.tsx` (new): Title card + "New local game" button
+- `src/ui/screens/NewGameScreen.tsx` (new): 6-step blind army-pick flow: p1-privacy → p1-pick → handover → p2-privacy → p2-pick → reveal
+- `src/ui/screens/GameScreen.tsx` (new): Main game UI — board, side-to-move indicator, captured-pieces tray, scrollable SAN move list, Essence meters (Veil), auto-flip with lock toggle, chooser sheet, end modal
+- `src/ui/components/Board.tsx` (new): 8×8 grid; `data-sq={sq}` on every cell; highlight classes from `buildHighlightMap`; rank/file coordinate labels
+- `src/ui/components/TurnChooser.tsx` (new): Bottom-sheet disambiguation for promotions, Shatter, rally variants
+- `src/ui/components/GameEndModal.tsx` (new): Win/draw modal covering all 5 `GameStatus` outcomes
+- `src/ui/hooks/useGameLogic.ts` (new): Core React hook — `legalTurns`, `applyTurn`, captured-piece history, checked-square detection via `getThreatModel`
+- `src/app/main.tsx` (updated): Imports `styles.css`
+- `vitest.config.ts` (updated): `environmentMatchGlobs` to use jsdom for `tests/ui/**`; `setupFiles` for jest-dom
+- `tests/ui/setup.ts` (new): jest-dom matcher registration for Vitest
+- `tests/ui/types.d.ts` (new): Module augmentation — `Assertion` extends `TestingLibraryMatchers`
+- `tests/ui/Board.test.tsx` (new, 13 tests): 64 squares, light/dark alternation, piece placement, highlight classes, click callbacks, flip, coordinate labels
+- `tests/ui/TurnChooser.test.tsx` (new, 4 tests): Option count, selection, cancel, promotion via SFEN position
+- `tests/e2e/hotseat.spec.ts` (new, 4 tests): Scholar's Mate to checkmate modal, SAN move list, army picker, back navigation
+- `tests/e2e/invasion.spec.ts` (new, 2 tests): `?sfen=` near-invasion position → d4-d5 → win modal → new game returns home
+- `playwright.config.ts` (new): Dev-server e2e config; pre-installed Chromium in dev env; CI uses standard playwright install
+- `.github/workflows/ci.yml` (updated): Added `e2e` job — `playwright install chromium` + `npm run build` + `npx playwright test`
+- `package.json` (updated): `test:e2e` script; devDependencies: `@playwright/test`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `jsdom`
+- 419 tests green (402 pre-existing + 17 new UI component tests); 6 Playwright e2e tests green
+
 ## S10 — 2026-06-26
 
 **PBM payloads, commit-reveal, replay validation, protocol doc**

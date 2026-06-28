@@ -8,6 +8,7 @@ npm run build      # TypeScript check + Vite build (for deployment)
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint over src/ and tests/
 npm run test       # Vitest (all suites)
+npm run test:e2e   # Playwright e2e (Crown-vs-Crown hotseat + invasion)
 ```
 
 ## Layout
@@ -61,7 +62,8 @@ Done: S7a (Wild army: Apex/Bronco full, Behemoth Armor hook live, interim Behemo
 Done: S7b (Wild army complete: Behemoth rampage wall-aware, Stalker strike-and-return + exhaustion + state-aware threat)  
 Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispatch, blocked-pawn semantics, shade-check-vs-Twins todo resolved, 21-matchup × 50-game property suite, `docs/RULES-INTERPRETATIONS.md`) — **engine feature-complete**  
 Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `replayGame`; full round-trip property suite 21 matchups; game fixtures; Thrall homing `P`-prefix notation; Veil `(E:n→m)` essence annotation; Wild `~` exhaustion; Twins rally `;K...` and Shatter `K@sq`)  
-Done: S10 (PBM core: commit-reveal handshake, lz-string URL payloads, full replay validation, tampering tests, `docs/PBM-PROTOCOL.md`)
+Done: S10 (PBM core: commit-reveal handshake, lz-string URL payloads, full replay validation, tampering tests, `docs/PBM-PROTOCOL.md`)  
+Done: S11 (Board UI + local hotseat: App shell, blind army-pick flow, Board component, GameScreen, chooser sheet, game-end modal, Playwright e2e harness)
 
 **No remaining engine todos.**
 
@@ -237,3 +239,51 @@ Registered as both generator and ThreatModel for army `'Wild'`.
 **Bronco** (N-slot): standard Knight; may capture friendly pieces, never own royal.
 
 **Armor** (captureConstraints, already S7a): enemy pieces may capture a Behemoth only from within Chebyshev 2 of its square. Friendly captures bypass Armor. Applied to `StandardMove`, `TeleportMove`, `RampageMove` (each captured square), and `StrikeMove` (target square) in `legality.ts`.
+
+## UI Architecture (S11)
+
+The UI is a dumb terminal for the engine — it renders `GameState` and submits `Turn`s; it never re-implements a rule.
+
+### Component map
+
+```
+src/ui/
+  styles.css              Dark theme; CSS custom properties per army (--army-Crown-W, etc.)
+  shared.ts               Shared constants + helpers (glyphs, highlight map, square order)
+  App.tsx                 Screen router; ?sfen= dev loader (DEV-gated)
+  screens/
+    HomeScreen.tsx         Title + "New local game" button
+    NewGameScreen.tsx      Blind pick flow: p1-privacy → p1-pick → handover → p2-privacy → p2-pick → reveal
+    GameScreen.tsx         Main game UI: board + chrome + move list + chooser + modal
+  components/
+    Board.tsx              8×8 grid; data-sq={sq} on every cell; highlight classes driven by map
+    TurnChooser.tsx        Bottom-sheet disambiguation for promotion / Shatter / multi-turn moves
+    GameEndModal.tsx       Win / draw modal for all 5 GameStatus outcomes
+  hooks/
+    useGameLogic.ts        Core state hook: legalTurns, applyTurn, captures, check squares
+```
+
+### Chooser pattern
+
+When a tap on `(from, dest)` maps to multiple legal `Turn`s (e.g. promotion with 4 slot choices, or Twins rally variants), `GameScreen` sets `chooserTurns` state. `TurnChooser` renders a bottom sheet; selecting an item calls `submitTurn(turn)` and clears the chooser.
+
+**Shatter UX**: `getPrimaryDest(shatter)` returns the warlord's own square. The user taps the warlord twice — first tap selects it, second tap finds a "dest" turn at the same square and submits.
+
+### `?sfen=` dev loader
+
+`App.tsx` reads `?sfen=` on mount, but only when `import.meta.env.DEV` is true (never active in production builds). Invalid SFEN is silently ignored with a console warning. Used by the invasion e2e test to inject a near-invasion position without playing through the whole game.
+
+### Board flip
+
+`boardSquaresInOrder(flipped)` returns 64 squares in render order. Unflipped: rank 8 top-left (sq 56). Flipped: rank 1 top-left (sq 7). `GameScreen` auto-flips when `sideToMove === 'B'`; a lock toggle freezes orientation.
+
+### What's intentionally clunky (pending S12+)
+
+- No timers or clocks
+- No undo / takeback
+- No board-orientation preference persistence
+- No sound
+- No animation between moves
+- Captured pieces tray shows piece count only (no grouping by value)
+- Essence meters shown only when Veil is present; no other army-specific chrome
+- No touch drag — only tap-to-select

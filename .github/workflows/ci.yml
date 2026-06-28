@@ -17,3 +17,21 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run build
+      - name: Run e2e tests
+        run: npx playwright test
+        env:
+          CI: true
+          PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
