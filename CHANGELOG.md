@@ -1,5 +1,27 @@
 # Changelog
 
+## S10 — 2026-06-26
+
+**PBM payloads, commit-reveal, replay validation, protocol doc**
+
+- `src/pbm/types.ts` (new): `Hasher`, `PBMPayload`, `Phase`, `PayloadResult`, `ValidationResult`, `ValidationError` — full type surface for the PBM layer
+- `src/pbm/codec.ts` (new): `checkSchema` (hand-rolled validator), `encodePayload` (lz-string URI-component compression), `decodePayload` (decompress + schema check)
+- `src/pbm/validate.ts` (new): `validatePayload(raw, hasher)` — four-stage pipeline: schema + version check → SHA-256 hash verification → full move replay via S9 `replayGame` → result consistency check; typed error union for each failure mode
+- `src/pbm/game.ts` (new): `createGame`, `respondToCommit`, `revealArmy`, `appendTurn` — pure payload-in/payload-out game flow; `appendTurn` replays existing moves to get current state then converts Turn to SAN via `turnToSan`
+- `src/pbm/index.ts`: exports full PBM public API
+- `docs/PBM-PROTOCOL.md` (new): byte-level wire format, phase machine, commitment hash spec, moves array encoding, validation rules, threat model (detectable vs. undetectable tampering, monotonic history check note), Network addon section (server as payload mailbox above a `Transport` interface)
+- `tests/pbm/pbm.test.ts` (new, 22 tests):
+  - Full handshake: create → respond → reveal → 4 moves of Fool's Mate → finished; `validatePayload` clean at every intermediate stage
+  - Hash mismatch: wrong salt, wrong army at reveal, tampered `reveal.salt`, tampered `reveal.army`
+  - Tampered move list: blocked-queen SAN fails replay at correct `{ moveNumber, side }`, invalid SAN gives replay error
+  - Forged result: result on ongoing game, null result on finished game, wrong winner
+  - Unknown version: v2 gives `newer-client`, missing `v` gives `schema`
+  - Round-trip encode/decode identity at commit phase and mid-game; 60-ply game stays under 6 KB encoded (~540 chars actual)
+  - Commit binding: mutating `armies.B` to an army whose Q-slot piece cannot make a recorded queen move fails replay
+  - Black-creator flow: `commit.by = 'B'` path validates correctly
+  - Schema: null/array/minimal-object inputs rejected
+- 402 tests green (380 pre-existing + 22 new)
+
 ## S5 — 2026-06-16
 
 **Accord army: Herald Banner, empowered threat model, queen-mode flag**
