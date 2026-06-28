@@ -1,5 +1,23 @@
 # Changelog
 
+## S12 — 2026-06-28
+
+**Army-special interaction UX**
+
+- `src/ui/strings.ts` (new): Single strings module — `HINTS` const object with all user-facing UI text (hint bar, button labels, preview titles, descriptions).
+- `src/ui/shared.ts` (updated): Extended `DestHighlightType` union with `legal-teleport-move`, `legal-teleport-capture`, `legal-homing`, `legal-friendly-capture`, `legal-rally`; updated `buildHighlightMap` with 8-level priority system; new helpers `isThrallHomingMove`, `primaryEq`, `chebyshev`, `buildRallyHighlightMap`, `hasCrossedMidline`, `armorZone`, `squareNeighbors`.
+- `src/ui/components/Board.tsx` (updated): New optional props `overlaySquares`, `rallyTurns`, `empoweredSquares`, `exhaustedSquares`, `invasionSquares`; `OverlayKind = 'banner' | 'armor' | 'blast' | 'rally-from'`; `data-rank` attribute; full `highlightClass()` dispatch for all 8 DestHighlightType values.
+- `src/ui/components/PieceGlyph.tsx` (updated): `empowered` and `exhausted` boolean props; renders `✦` and `⊗` badges; `data-empowered` / `data-exhausted` attributes; 50% opacity on exhausted pieces.
+- `src/ui/components/EssenceMeter.tsx` (updated): `essenceDelta` prop; animates `+N`/`−N` tick span on Veil essence changes.
+- `src/ui/components/HintBar.tsx` (new): `<div role="status" aria-live="polite">` hint bar; null-renders when no message.
+- `src/ui/components/ShatterPreview.tsx` (new): Modal overlay listing all adjacent doomed pieces with friendly-warning styling; `data-testid` attributes for tests.
+- `src/ui/components/RampagePreview.tsx` (new): Modal overlay listing `RampageMove.captures` victims with confirm/cancel; never recomputes captures from board.
+- `src/ui/screens/GameScreen.tsx` (updated): Twins two-phase input (`twinsStagingTurns` state + `primaryEq` filter + rally bar with Back / Skip); Shatter mode button; rampage-preview interception; Accord `bannerZone` overlay; Wild armor-radius overlay; empowered / exhausted / invasion sets computed via `useMemo`; hint bar wired to staging / check / exhaustion states.
+- `src/ui/styles.css` (updated): New CSS variables and classes — `hl-teleport-move` (dashed dot), `hl-teleport-capture` (dashed ring), `hl-homing` (orange dot), `hl-friendly-capture` (amber ring), `hl-rally` (red dot); `overlay-{banner,armor,blast,rally-from}` via `::before`; `hl-invaded` (green tint); midline marker via `board-wrapper::after`; piece badge styles; hint-bar, shatter-bar, rally-bar, preview-overlay/sheet layouts; essence tick animation.
+- `tests/ui/army-interactions.test.tsx` (new, 21 tests): Component-level tests for Twins staging filter / skip / rally highlight, ShatterPreview doomed list, RampagePreview capture list, Veil highlight type assignment, Phantom homing detection, Wild exhausted badge + no-captures, Accord empowered badge + extra destinations, Crown backward compatibility.
+- `tests/e2e/army-specials.spec.ts` (new, 15 tests): Playwright e2e suite — one describe block per non-Crown army using `?sfen=` fixtures; covers Shatter+rally flow, teleport-capture highlight, piercing-check hint, empowered-Knight destinations, rampage preview chain, exhausted-Stalker badge+hint.
+- `docs/checklists/S12-manual.md` (new): Manual QA checklist covering all army-specific interactions.
+
 ## S11 — 2026-06-28
 
 **Board UI, local hotseat, Playwright e2e harness**

@@ -1,14 +1,20 @@
-import type { GameState, Square, Turn } from '../../engine/types';
+import type { Army, Color, GameState, Square, Turn } from '../../engine/types';
 import {
   boardSquaresInOrder,
   buildHighlightMap,
+  buildRallyHighlightMap,
+  chebyshev,
   getPrimaryDest,
   getPrimaryFrom,
+  hasCrossedMidline,
   isLightSquare,
   squareFile,
   squareRank,
+  type DestHighlightType,
 } from '../shared';
 import { PieceGlyph } from './PieceGlyph';
+
+export type OverlayKind = 'banner' | 'armor' | 'blast' | 'rally-from';
 
 interface Props {
   gameState: GameState;
@@ -18,6 +24,12 @@ interface Props {
   lastMovePrimary: Turn['primary'] | null;
   checkedSquares: Square[];
   onSquareClick: (sq: Square) => void;
+  // S12 additions (all optional)
+  overlaySquares?: Map<Square, OverlayKind>;
+  rallyTurns?: Turn[];           // staging turns for rally phase highlight
+  empoweredSquares?: Set<Square>;
+  exhaustedSquares?: Set<Square>;
+  invasionSquares?: Set<Square>; // royals past midline
 }
 
 export function Board({
@@ -28,9 +40,24 @@ export function Board({
   lastMovePrimary,
   checkedSquares,
   onSquareClick,
+  overlaySquares,
+  rallyTurns,
+  empoweredSquares,
+  exhaustedSquares,
+  invasionSquares,
 }: Props) {
-  const { board, armies } = gameState;
-  const highlightMap = buildHighlightMap(legalMovesForSelected, board);
+  const { board, armies, sideToMove } = gameState;
+
+  // Build destination highlight map from legal moves for selected piece
+  const highlightMap = buildHighlightMap(
+    legalMovesForSelected,
+    board,
+    sideToMove,
+    armies[sideToMove],
+  );
+
+  // If in rally phase, overlay rally destinations
+  const rallyHighlightMap = rallyTurns ? buildRallyHighlightMap(rallyTurns) : null;
 
   // Last-move squares
   const lastFrom = lastMovePrimary ? getLastFrom(lastMovePrimary) : null;
@@ -50,6 +77,10 @@ export function Board({
         const showRank = flipped ? file === 7 : file === 0;
         const showFile = flipped ? rank === 7 : rank === 0;
 
+        const overlayKind = overlaySquares?.get(sq);
+        const rallyHl = rallyHighlightMap?.get(sq);
+        const activeHl = rallyHl ?? highlightMap.get(sq);
+
         // CSS classes
         const classes = [
           'board-sq',
@@ -58,8 +89,13 @@ export function Board({
           checkedSquares.includes(sq) ? 'hl-check' : '',
           lastFrom === sq && selectedSquare !== sq ? 'hl-last-from' : '',
           lastTo   === sq && selectedSquare !== sq ? 'hl-last-to'   : '',
-          highlightMap.has(sq) ? highlightClass(highlightMap.get(sq)!) : '',
+          activeHl ? highlightClass(activeHl) : '',
+          overlayKind ? `overlay-${overlayKind}` : '',
+          invasionSquares?.has(sq) ? 'hl-invaded' : '',
         ].filter(Boolean).join(' ');
+
+        const isEmpowered = empoweredSquares?.has(sq);
+        const isExhausted = exhaustedSquares?.has(sq);
 
         return (
           <div
@@ -68,6 +104,7 @@ export function Board({
             role="gridcell"
             aria-label={squareLabel(sq, piece, armies)}
             data-sq={sq}
+            data-rank={rank}
             onClick={() => onSquareClick(sq)}
           >
             {showRank && (
@@ -80,7 +117,14 @@ export function Board({
                 {String.fromCharCode(97 + file)}
               </span>
             )}
-            {piece && <PieceGlyph piece={piece} armies={armies} />}
+            {piece && (
+              <PieceGlyph
+                piece={piece}
+                armies={armies}
+                empowered={isEmpowered}
+                exhausted={isExhausted}
+              />
+            )}
           </div>
         );
       })}
@@ -88,11 +132,16 @@ export function Board({
   );
 }
 
-function highlightClass(hl: 'legal-move' | 'legal-capture' | 'legal-special'): string {
+function highlightClass(hl: DestHighlightType): string {
   switch (hl) {
-    case 'legal-move':    return 'hl-move';
-    case 'legal-capture': return 'hl-capture';
-    case 'legal-special': return 'hl-special';
+    case 'legal-move':              return 'hl-move';
+    case 'legal-capture':           return 'hl-capture';
+    case 'legal-special':           return 'hl-special';
+    case 'legal-teleport-move':     return 'hl-teleport-move';
+    case 'legal-teleport-capture':  return 'hl-teleport-capture';
+    case 'legal-homing':            return 'hl-homing';
+    case 'legal-friendly-capture':  return 'hl-friendly-capture';
+    case 'legal-rally':             return 'hl-rally';
   }
 }
 
@@ -110,7 +159,7 @@ function getLastTo(primary: Turn['primary']): Square | null {
   switch (primary.type) {
     case 'standard': return primary.to;
     case 'teleport': return primary.to;
-    case 'shatter':  return null; // shatter is in-place
+    case 'shatter':  return null;
     case 'rampage':  return primary.to;
     case 'strike':   return primary.target;
   }
@@ -147,3 +196,7 @@ export function getDestinationsForOrigin(
   }
   return map;
 }
+
+// Re-export for consumers that need it
+export { chebyshev, hasCrossedMidline };
+export type { Color, Army, Square };
