@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import type { Army, RampageMove, Square, Turn } from '../../engine/types';
+import { useCallback, useMemo, useState } from 'react';
+import type { Army, Color, RampageMove, Square, Turn } from '../../engine/types';
 import { bannerZone } from '../../engine/accord';
 import { Board, getDestinationsForOrigin } from '../components/Board';
 import type { OverlayKind } from '../components/Board';
@@ -27,11 +27,17 @@ interface Props {
   armyW: Army;
   armyB: Army;
   initialSfen?: string;
+  /** If set, only this color can make moves (PBM mode). */
+  myColor?: Color;
+  /** Called after each turn is applied. */
+  onTurnSubmitted?: (turn: Turn) => void;
+  /** Called when "Review" is clicked in the end modal. */
+  onReview?: () => void;
   onHome: () => void;
   onNewGame: () => void;
 }
 
-export function GameScreen({ armyW, armyB, initialSfen, onHome, onNewGame }: Props) {
+export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted, onReview, onHome, onNewGame }: Props) {
   const logic = useGameLogic(armyW, armyB, initialSfen);
   const {
     gameState,
@@ -43,8 +49,13 @@ export function GameScreen({ armyW, armyB, initialSfen, onHome, onNewGame }: Pro
     allLegal,
     checkedSquares,
     setSelectedSquare,
-    submitTurn,
+    submitTurn: rawSubmitTurn,
   } = logic;
+
+  const submitTurn = useCallback((turn: Turn) => {
+    rawSubmitTurn(turn);
+    onTurnSubmitted?.(turn);
+  }, [rawSubmitTurn, onTurnSubmitted]);
 
   // ── Standard chooser (fallback for multi-turn disambiguation) ──
   const [chooserTurns, setChooserTurns] = useState<Turn[] | null>(null);
@@ -180,6 +191,8 @@ export function GameScreen({ armyW, armyB, initialSfen, onHome, onNewGame }: Pro
   // ── Click handler ──
   function handleSquareClick(sq: Square) {
     if (status.type !== 'ongoing') return;
+    // PBM mode: block input when it's not our turn
+    if (myColor !== undefined && gameState.sideToMove !== myColor) return;
 
     // ── Rally phase (Twins staging) ──
     if (twinsStagingTurns !== null) {
@@ -450,9 +463,16 @@ export function GameScreen({ armyW, armyB, initialSfen, onHome, onNewGame }: Pro
         <GameEndModal
           status={status}
           armies={armies}
-          onReview={() => {}}
+          onReview={onReview ?? (() => {})}
           onNewGame={onNewGame}
         />
+      )}
+
+      {/* PBM waiting banner */}
+      {status.type === 'ongoing' && myColor !== undefined && gameState.sideToMove !== myColor && (
+        <div className="pbm-waiting-banner" data-testid="waiting-banner">
+          Waiting for opponent's move…
+        </div>
       )}
     </div>
   );

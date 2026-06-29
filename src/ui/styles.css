@@ -1038,3 +1038,293 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ─── S13: PBM + persistence ─── */
+
+/* Share screen */
+.share-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.share-header { display: flex; flex-direction: column; gap: 6px; }
+.share-title  { font-size: 20px; font-weight: 700; }
+.share-subtitle { font-size: 13px; color: var(--text-dim); }
+
+.share-url-block { display: flex; flex-direction: column; gap: 8px; }
+.share-url-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+
+.share-url-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  padding: 10px 12px;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-url-input:focus { outline: 1px solid var(--text-muted); }
+
+.share-textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 10px 12px;
+  resize: none;
+  font-family: inherit;
+}
+
+.share-actions { display: flex; gap: 10px; }
+.share-actions .btn { flex: 1; }
+.share-text-block { display: flex; flex-direction: column; gap: 8px; }
+
+.share-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+}
+.share-footer .btn { flex: 1; }
+
+/* Share overlay (PBM game) */
+.share-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  animation: fade-in 150ms ease;
+}
+
+/* Import screen */
+.import-screen { gap: 16px; }
+.import-desc { font-size: 14px; color: var(--text-dim); }
+
+.import-textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 14px;
+  padding: 12px;
+  resize: vertical;
+  font-family: inherit;
+  min-height: 100px;
+}
+.import-textarea:focus { outline: 1px solid var(--text-muted); }
+
+.import-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: color-mix(in srgb, #f07878 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, #f07878 30%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #f07878;
+}
+.import-error-icon { flex-shrink: 0; font-weight: 700; }
+.import-error-msg { flex: 1; }
+
+/* Games list */
+.games-list { display: flex; flex-direction: column; gap: 10px; flex: 1; overflow-y: auto; }
+.games-empty { flex: 1; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; color: var(--text-dim); font-size: 14px; }
+
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.game-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.game-row-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-row-armies { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.game-row-army { color: var(--text-dim); }
+.game-row-sep { color: var(--text-muted); font-size: 10px; }
+.game-row-status { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.game-row-result { font-size: 12px; color: var(--text-dim); font-family: 'SF Mono', 'Fira Code', monospace; }
+.game-row-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+/* PBM form elements */
+.pbm-form { display: flex; flex-direction: column; gap: 12px; }
+.pbm-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.pbm-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 16px;
+  padding: 10px 12px;
+  font-family: inherit;
+}
+.pbm-input:focus { outline: 1px solid var(--text); }
+
+/* Color pick */
+.color-pick { display: flex; gap: 12px; }
+.color-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 12px;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+.color-btn:active { opacity: 0.8; }
+.color-btn.selected { background: var(--elevated); border-color: var(--text); }
+.color-btn-piece { font-size: 32px; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Chess', serif; }
+.color-btn-label { font-size: 15px; font-weight: 600; color: var(--text); }
+.color-btn-desc { font-size: 11px; color: var(--text-muted); }
+
+/* PBM info card */
+.pbm-info-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pbm-info-row { display: flex; justify-content: space-between; font-size: 13px; }
+.pbm-info-label { color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; }
+.pbm-info-value { color: var(--text-dim); }
+
+/* Privacy warning */
+.privacy-warning {
+  font-size: 12px;
+  color: #f0a840;
+  background: color-mix(in srgb, #f0a840 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, #f0a840 30%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* Conflict screen */
+.conflict-screen { gap: 16px; }
+.conflict-icon { font-size: 40px; text-align: center; }
+.conflict-title { font-size: 20px; font-weight: 700; text-align: center; }
+.conflict-desc { font-size: 13px; color: var(--text-dim); text-align: center; line-height: 1.5; }
+
+.conflict-compare {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.conflict-version { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.conflict-version-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.conflict-version-move { font-size: 15px; font-weight: 600; }
+.conflict-version-last { font-size: 11px; color: var(--text-dim); font-family: 'SF Mono', monospace; }
+.conflict-sep { font-size: 12px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+
+/* Salt missing */
+.salt-missing-screen { gap: 20px; }
+
+/* PBM waiting banner */
+.pbm-waiting-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--elevated);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  padding: 12px;
+  z-index: 50;
+}
+
+/* Replay screen */
+.replay-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.replay-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+.replay-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.replay-nav-btn {
+  font-size: 14px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+
+.replay-slider {
+  flex: 1;
+  accent-color: var(--text);
+}
+
+.replay-move-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  min-height: 16px;
+}
+
+.replay-move-list {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  overflow-y: auto;
+}
+
+.replay-move-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px;
+}
+.replay-move-btn.replay-active {
+  background: var(--elevated);
+  color: var(--text);
+  font-weight: 600;
+}
