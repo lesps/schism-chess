@@ -2,17 +2,22 @@ import type { GameStatus } from '../../engine/status';
 import type { Army, Color } from '../../engine/types';
 import { ARMY_ACCENTS, ARMY_NAMES } from '../shared';
 
+const WIN_CONDITION_RULE_ANCHOR = 'win-conditions';
+const DRAWS_RULE_ANCHOR = 'draws';
+
 interface Props {
   status: GameStatus;
   armies: { W: Army; B: Army };
   onReview: () => void;
   onNewGame: () => void;
+  onRules?: (anchor: string) => void;
 }
 
-export function GameEndModal({ status, armies, onReview, onNewGame }: Props) {
+export function GameEndModal({ status, armies, onReview, onNewGame, onRules }: Props) {
   if (status.type === 'ongoing') return null;
 
   const { icon, title, subtitle, accent } = buildContent(status, armies);
+  const rulesAnchor = status.type === 'draw' ? DRAWS_RULE_ANCHOR : WIN_CONDITION_RULE_ANCHOR;
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal aria-label="Game over">
@@ -29,6 +34,15 @@ export function GameEndModal({ status, armies, onReview, onNewGame }: Props) {
           <button className="btn btn-ghost" onClick={onReview}>
             Review board
           </button>
+          {onRules && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => onRules(rulesAnchor)}
+              style={{ fontSize: 13 }}
+            >
+              See rules →
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.0.0 — 2026-06-30
+
+**v1.0.0 — Polish, docs, deploy**
+
+### Documentation
+- `README.md` (new): Project overview, six-army table, play link, local dev quickstart, architecture pointer.
+- `docs/ARCHITECTURE.md` (new): Engine purity rule, square encoding, core pipeline, registry pattern, Turn atomicity rationale (Twins), named constants with locations, SFEN-X format, captureConstraints call-site, PBM phase machine, UI data flow, Transport seam, build/CI summary.
+- `docs/checklists/RELEASE.md` (new): Manual QA checklist — local hotseat, each army's special, win conditions, PBM two-device flow, rules reference, accessibility, refresh-resume.
+- `CHANGELOG.md`: Cut v1.0.0 entry.
+
+### Features
+- **SAN input box**: `src/ui/components/SanInput.tsx` — keyboard-driven move entry; wired to `sanToTurn`; inline parse-error display; `aria-label`, `aria-describedby`; disabled when not our turn (PBM) or game over.
+- **In-app rules reference**: `src/ui/screens/RulesScreen.tsx` + `src/ui/utils/renderMarkdown.ts` — RULES.md rendered from `?raw` import; minimal markdown-to-HTML converter (headings with IDs, paragraphs, bold, italic, code, tables, blockquotes, unordered lists, links); `scroll-margin-top` for fixed header; accessed via rules overlay in App.
+- **Army "?" rules links**: each army card in `ArmyPicker` gets a circular "?" button deep-linking to the army's section in the rules.
+- **End-modal rules link**: `GameEndModal` gains an optional "See rules →" button deep-linking to `#win-conditions` or `#draws`.
+- **Rules button on HomeScreen**: fifth action button.
+- **Rules overlay**: App.tsx renders `RulesScreen` as a full-screen overlay triggered by `rulesOverlay` state; accessible from home, army picker, and end modal without losing underlying screen state.
+
+### Visual polish
+- `army-card-header` flex row: army name + rules-link button side by side.
+- CSS `piece-arrive` animation (160ms, `prefers-reduced-motion` respected): piece fades and scales in on the destination square after each move.
+- Per-army accent colors already present in S11–S12 CSS variables now consistently used across all UI surfaces.
+
+### Accessibility
+- `SanInput` provides `aria-label`, `aria-invalid`, `aria-describedby` (error message), `role="alert"` on error.
+- `MoveListPanel` already has `role="log"` (live region) from S12; unchanged.
+- Board squares already have `aria-label` with piece name; unchanged.
+
+### Tests
+- `tests/ui/SanInput.test.tsx` (new, 8 tests): valid move submission, input cleared, invalid SAN error display, error cleared on key press, Escape clears, disabled state, empty Enter no-op, aria-label.
+- `tests/e2e/keyboard-san.spec.ts` (new, 4 tests): plays move via SAN input, inline error for invalid SAN, Knight move via SAN, Rules link on home screen.
+
+### CI / Deploy
+- `.github/workflows/deploy.yml`: added `tags: ['v*']` trigger; deploys on semver tag pushes in addition to `main`.
+- `package.json`: version bumped to `1.0.0`.
+
+### Bundle size
+Initial JS bundle: **89 KB gzip** (well under 300 KB threshold).
+
+---
+
+## S13 — 2026-06-29
+
 ## S12 — 2026-06-28
 
 **Army-special interaction UX**

@@ -9,6 +9,7 @@ import { GameEndModal } from '../components/GameEndModal';
 import { HintBar } from '../components/HintBar';
 import { MoveListPanel } from '../components/MoveListPanel';
 import { RampagePreview } from '../components/RampagePreview';
+import { SanInput } from '../components/SanInput';
 import { ShatterPreview } from '../components/ShatterPreview';
 import { TurnChooser } from '../components/TurnChooser';
 import { useGameLogic, turnsForMove } from '../hooks/useGameLogic';
@@ -35,9 +36,10 @@ interface Props {
   onReview?: () => void;
   onHome: () => void;
   onNewGame: () => void;
+  onRules?: (anchor: string) => void;
 }
 
-export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted, onReview, onHome, onNewGame }: Props) {
+export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted, onReview, onHome, onNewGame, onRules }: Props) {
   const logic = useGameLogic(armyW, armyB, initialSfen);
   const {
     gameState,
@@ -400,6 +402,14 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         <CapturedPieceTray captured={captured} armies={armies} />
         <EssenceMeter essence={gameState.essence} armies={armies} essenceDelta={essenceDelta} />
         <MoveListPanel history={history} />
+        <SanInput
+          gameState={gameState}
+          disabled={
+            status.type !== 'ongoing' ||
+            (myColor !== undefined && gameState.sideToMove !== myColor)
+          }
+          onSubmit={submitTurn}
+        />
       </div>
 
       {/* Shatter preview */}
@@ -465,6 +475,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
           armies={armies}
           onReview={onReview ?? (() => {})}
           onNewGame={onNewGame}
+          onRules={onRules}
         />
       )}
 

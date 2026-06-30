@@ -8,7 +8,7 @@ npm run build      # TypeScript check + Vite build (for deployment)
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint over src/ and tests/
 npm run test       # Vitest (all suites)
-npm run test:e2e   # Playwright e2e (Crown-vs-Crown hotseat + invasion)
+npm run test:e2e   # Playwright e2e (hotseat, invasion, army-specials, PBM, keyboard-SAN)
 ```
 
 ## Layout
@@ -19,7 +19,7 @@ src/pbm/       # Pure TS — play-by-post logic (S10: types, codec, game flow, v
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
-docs/          # RULES.md (canonical ruleset, v2.0.1); RULES-INTERPRETATIONS.md (judgment calls)
+docs/          # RULES.md (canonical ruleset, v2.0.1); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
 ```
 
 ## Engine Purity Rule
@@ -65,9 +65,20 @@ Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `rep
 Done: S10 (PBM core: commit-reveal handshake, lz-string URL payloads, full replay validation, tampering tests, `docs/PBM-PROTOCOL.md`)  
 Done: S11 (Board UI + local hotseat: App shell, blind army-pick flow, Board component, GameScreen, chooser sheet, game-end modal, Playwright e2e harness)  
 Done: S12 (Army-special interaction UX: Twins two-phase input + Shatter preview + rally bar, Veil slide/teleport/teleport-capture highlight distinction, Phantom piercing-check hint bar, Accord banner-zone overlay + empowered badge, Wild rampage preview + exhausted-Stalker badge + armor radius overlay, midline marker, invasion progress tint, `src/ui/strings.ts`, `docs/checklists/S12-manual.md`, 5-army Playwright e2e suite)  
-Done: S13 (PBM UI + Persistence: share/import flows, `Transport` + `LocalStorageTransport`, local-game auto-save, PBM create/respond/reveal flows, `ShareScreen` overlay, `ImportScreen`, `ConflictScreen`, `SaltMissingScreen`, `ReplayScreen`, `GamesListScreen`, `PBMCreateScreen`, `PBMRespondScreen`, `GameScreen` `myColor` prop + waiting banner, `HomeScreen` 4-button layout, `hashchange` routing, lz-string CJS interop fix, two-context Fool's Mate Playwright e2e, refresh-resume, tamper detection, conflict screen, replay mode tests)
+Done: S13 (PBM UI + Persistence: share/import flows, `Transport` + `LocalStorageTransport`, local-game auto-save, PBM create/respond/reveal flows, `ShareScreen` overlay, `ImportScreen`, `ConflictScreen`, `SaltMissingScreen`, `ReplayScreen`, `GamesListScreen`, `PBMCreateScreen`, `PBMRespondScreen`, `GameScreen` `myColor` prop + waiting banner, `HomeScreen` 4-button layout, `hashchange` routing, lz-string CJS interop fix, two-context Fool's Mate Playwright e2e, refresh-resume, tamper detection, conflict screen, replay mode tests)  
+Done: S14 (**v1.0.0 shipped** — polish, docs, deploy: `README.md`, `docs/ARCHITECTURE.md`, `docs/checklists/RELEASE.md`, `CHANGELOG.md` 1.0.0; `SanInput` keyboard-move entry + 8 component tests + 4 e2e tests; `RulesScreen` + `renderMarkdown` (RULES.md `?raw` import); per-army "?" rules deep-links in ArmyPicker; rules overlay in App.tsx; "See rules" link in GameEndModal; "Rules" button on HomeScreen; `piece-arrive` animation; `deploy.yml` tag trigger; bundle 89 KB gzip)
 
-**No remaining engine todos.**
+**No remaining engine todos. v1.0.0 shipped.**
+
+## Post-1.0 Backlog
+
+The following are deferred and tracked as GitHub issues:
+
+1. **SVG piece set** — replace Unicode glyphs with original SVGs behind the existing `PieceGlyph` seam. The slot/color API is unchanged; only the visual output changes.
+2. **Network backend** — plug in a server as a payload mailbox above the `Transport` interface (see `docs/PBM-PROTOCOL.md §Network` and `docs/ARCHITECTURE.md §Transport seam`). No other code changes needed.
+3. **Sound** — move/capture/check audio; `prefers-reduced-motion` + a mute toggle.
+4. **AI opponent** — single-player mode; engine is already pure TS so a WASM worker is natural.
+5. **Axe automated a11y scan** — add `@axe-core/playwright` to the e2e suite for WCAG critical-violation gating.
 
 **Exported API** (next session can rely on all of these from `src/engine/index.ts`):
 
@@ -281,15 +292,20 @@ The UI is a dumb terminal for the engine — it renders `GameState` and submits 
 src/ui/
   styles.css              Dark theme; CSS custom properties per army (--army-Crown-W, etc.)
   shared.ts               Shared constants + helpers (glyphs, highlight map, square order)
-  App.tsx                 Screen router; ?sfen= dev loader (DEV-gated)
+  strings.ts              All user-facing UI strings (HINTS object)
+  App.tsx                 Screen router; rulesOverlay state; ?sfen= dev loader (DEV-gated)
+  utils/
+    renderMarkdown.ts     Minimal markdown-to-HTML (headings+IDs, tables, code, lists, etc.)
   screens/
-    HomeScreen.tsx         Title + "New local game" button
+    HomeScreen.tsx         Title + action buttons including Rules
     NewGameScreen.tsx      Blind pick flow: p1-privacy → p1-pick → handover → p2-privacy → p2-pick → reveal
-    GameScreen.tsx         Main game UI: board + chrome + move list + chooser + modal
+    GameScreen.tsx         Main game UI: board + chrome + move list + SAN input + chooser + modal
+    RulesScreen.tsx        RULES.md rendered via ?raw import + renderMarkdown; anchor scrolling
   components/
     Board.tsx              8×8 grid; data-sq={sq} on every cell; highlight classes driven by map
+    SanInput.tsx           SAN text input; sanToTurn; inline parse-error; aria labels
     TurnChooser.tsx        Bottom-sheet disambiguation for promotion / Shatter / multi-turn moves
-    GameEndModal.tsx       Win / draw modal for all 5 GameStatus outcomes
+    GameEndModal.tsx       Win / draw modal; optional "See rules" link
   hooks/
     useGameLogic.ts        Core state hook: legalTurns, applyTurn, captures, check squares
 ```

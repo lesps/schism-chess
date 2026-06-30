@@ -3,9 +3,10 @@ interface Props {
   onNewPBMGame: () => void;
   onGamesList: () => void;
   onImport: () => void;
+  onRules: () => void;
 }
 
-export function HomeScreen({ onNewLocalGame, onNewPBMGame, onGamesList, onImport }: Props) {
+export function HomeScreen({ onNewLocalGame, onNewPBMGame, onGamesList, onImport, onRules }: Props) {
   return (
     <main className="home">
       <h1 className="home-title">Schism Chess</h1>
@@ -24,6 +25,9 @@ export function HomeScreen({ onNewLocalGame, onNewPBMGame, onGamesList, onImport
         </button>
         <button className="btn btn-ghost" onClick={onGamesList} data-testid="games-list">
           My games
+        </button>
+        <button className="btn btn-ghost" onClick={onRules} data-testid="rules-link">
+          Rules
         </button>
       </div>
     </main>
