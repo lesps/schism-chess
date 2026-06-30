@@ -8,9 +8,10 @@ type Step = 'p1-privacy' | 'p1-pick' | 'handover' | 'p2-privacy' | 'p2-pick' | '
 interface Props {
   onStart: (armyW: Army, armyB: Army) => void;
   onBack: () => void;
+  onRules?: (anchor: string) => void;
 }
 
-export function NewGameScreen({ onStart, onBack }: Props) {
+export function NewGameScreen({ onStart, onBack, onRules }: Props) {
   const [step, setStep] = useState<Step>('p1-privacy');
   const [armyW, setArmyW] = useState<Army | null>(null);
   const [armyB, setArmyB] = useState<Army | null>(null);
@@ -48,7 +49,7 @@ export function NewGameScreen({ onStart, onBack }: Props) {
             <h2>Choose your army</h2>
           </div>
           <div className="ng-player-label">Player 1 (White)</div>
-          <ArmyPicker selected={armyW} onSelect={setArmyW} />
+          <ArmyPicker selected={armyW} onSelect={setArmyW} onRules={onRules} />
           <div className="ng-footer">
             <button
               className="btn btn-primary"
@@ -108,7 +109,7 @@ export function NewGameScreen({ onStart, onBack }: Props) {
             <h2>Choose your army</h2>
           </div>
           <div className="ng-player-label">Player 2 (Black)</div>
-          <ArmyPicker selected={armyB} onSelect={setArmyB} />
+          <ArmyPicker selected={armyB} onSelect={setArmyB} onRules={onRules} />
           <div className="ng-footer">
             <button
               className="btn btn-primary"

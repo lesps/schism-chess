@@ -19,6 +19,7 @@ import { ShareScreen } from './screens/ShareScreen';
 import { ConflictScreen } from './screens/ConflictScreen';
 import { SaltMissingScreen } from './screens/SaltMissingScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
+import { RulesScreen } from './screens/RulesScreen';
 
 type Screen =
   | { type: 'home' }
@@ -64,6 +65,8 @@ export default function App() {
 
   // Track the current payload for persistence (local and PBM games)
   const currentPayloadRef = useRef<PBMPayload | null>(null);
+  // Rules overlay (shown on top of any screen without losing state)
+  const [rulesOverlay, setRulesOverlay] = useState<{ anchor?: string } | null>(null);
   // Share overlay for PBM games (shown on top of GameScreen)
   const [shareOverlay, setShareOverlay] = useState<{
     payload: PBMPayload; title: string; subtitle?: string;
@@ -76,7 +79,11 @@ export default function App() {
       const hash = window.location.hash;
       if (hash.startsWith('#g=')) {
         setShareOverlay(null);
+        setRulesOverlay(null);
         setScreen({ type: 'import', preloaded: hash.slice(3) });
+      } else if (hash.startsWith('#rules')) {
+        const anchor = hash.slice('#rules'.length).replace(/^\//, '') || undefined;
+        setRulesOverlay({ anchor });
       }
     }
     window.addEventListener('hashchange', handleHashChange);
@@ -101,6 +108,13 @@ export default function App() {
           console.warn('[dev] Invalid ?sfen= parameter — ignoring.');
         }
       }
+    }
+
+    // #rules link: show as overlay
+    if (hash.startsWith('#rules')) {
+      const anchor = hash.slice('#rules'.length).replace(/^\//, '') || undefined;
+      setRulesOverlay({ anchor });
+      return;
     }
 
     // #g= link: go to import flow
@@ -345,6 +359,18 @@ export default function App() {
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  // Rules overlay: shown on top of any screen without unmounting it.
+  if (rulesOverlay !== null) {
+    return (
+      <div className="app">
+        <RulesScreen
+          anchor={rulesOverlay.anchor}
+          onBack={() => setRulesOverlay(null)}
+        />
+      </div>
+    );
+  }
+
   const s = screen;
 
   if (s.type === 'home') {
@@ -355,6 +381,7 @@ export default function App() {
           onNewPBMGame={() => setScreen({ type: 'pbm-create' })}
           onGamesList={() => setScreen({ type: 'games-list' })}
           onImport={() => setScreen({ type: 'import' })}
+          onRules={() => setRulesOverlay({})}
         />
       </div>
     );
@@ -366,6 +393,7 @@ export default function App() {
         <NewGameScreen
           onStart={handleLocalStart}
           onBack={() => setScreen({ type: 'home' })}
+          onRules={anchor => setRulesOverlay({ anchor })}
         />
       </div>
     );
@@ -382,6 +410,7 @@ export default function App() {
           onReview={handleReviewFromModal}
           onHome={handleHome}
           onNewGame={handleNewGame}
+          onRules={anchor => setRulesOverlay({ anchor })}
         />
       </div>
     );
@@ -399,6 +428,7 @@ export default function App() {
           onReview={handleReviewFromModal}
           onHome={handleHome}
           onNewGame={handleNewGame}
+          onRules={anchor => setRulesOverlay({ anchor })}
         />
         {shareOverlay && (
           <div className="share-overlay">
@@ -619,3 +649,4 @@ export default function App() {
 
   return null;
 }
+

@@ -1039,6 +1039,240 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+/* ─── S14: Polish, rules, SAN input ─── */
+
+/* Army card: header row with name + rules link */
+.army-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.army-card-rules-link {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color var(--transition), color var(--transition);
+}
+.army-card-rules-link:hover { border-color: var(--text-dim); color: var(--text-dim); }
+.army-card-rules-link:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* Piece move animation: fade in slightly when piece arrives */
+@keyframes piece-arrive {
+  from { opacity: 0.4; transform: scale(0.88); }
+  to   { opacity: 1;   transform: scale(1); }
+}
+.board-sq.hl-last-to .piece-glyph {
+  animation: piece-arrive 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-sq.hl-last-to .piece-glyph { animation: none; }
+}
+
+/* ─── SAN input ─── */
+.san-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 4px;
+  border-top: 1px solid var(--border);
+}
+
+.san-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 14px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  padding: 7px 10px;
+  transition: border-color var(--transition);
+}
+.san-input:focus {
+  outline: none;
+  border-color: var(--text-muted);
+}
+.san-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.san-input.san-input-error {
+  border-color: #f07878;
+}
+.san-error {
+  font-size: 11px;
+  color: #f07878;
+  padding: 0 2px;
+}
+
+/* ─── Rules screen ─── */
+.rules-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.rules-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 52px;
+}
+
+.rules-back {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+}
+
+.rules-header-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rules-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px 48px;
+  max-width: 680px;
+  width: 100%;
+  align-self: center;
+}
+
+/* Markdown-rendered content */
+.rules-content h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.rules-content h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 28px 0 8px;
+  color: var(--text);
+  scroll-margin-top: 60px;
+}
+.rules-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 20px 0 6px;
+  color: var(--text);
+  scroll-margin-top: 60px;
+}
+.rules-content h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 16px 0 4px;
+  color: var(--text-dim);
+  scroll-margin-top: 60px;
+}
+.rules-content p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+.rules-content ul {
+  margin: 0 0 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rules-content li {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.rules-content strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.rules-content em { font-style: italic; }
+.rules-content code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.87em;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--text);
+}
+.rules-content pre {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+.rules-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+}
+.rules-content blockquote {
+  border-left: 3px solid var(--border);
+  padding: 6px 12px;
+  margin: 0 0 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.rules-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+.rules-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+.rules-content th {
+  background: var(--elevated);
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+}
+.rules-content td {
+  color: var(--text-dim);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+.rules-content a {
+  color: var(--army-Phantom);
+  text-decoration: none;
+}
+.rules-content a:hover { text-decoration: underline; }
+
 /* ─── S13: PBM + persistence ─── */
 
 /* Share screen */
