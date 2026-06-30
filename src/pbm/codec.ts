@@ -1,8 +1,8 @@
-import {
-  compressToEncodedURIComponent,
-  decompressFromEncodedURIComponent,
-} from 'lz-string';
+// lz-string is a CJS module; use default import so it works in both Vite and Node.js ESM.
+import LZString from 'lz-string';
 import type { PBMPayload } from './types';
+
+const { compressToEncodedURIComponent, decompressFromEncodedURIComponent } = LZString;
 
 const VALID_ARMIES = ['Crown', 'Phantom', 'Accord', 'Twins', 'Veil', 'Wild'] as const;
 const VALID_PHASES = ['commit', 'reveal', 'play', 'finished'] as const;

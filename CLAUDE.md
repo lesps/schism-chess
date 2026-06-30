@@ -64,7 +64,8 @@ Done: S8 (Full promotion for all 6 armies, `promoted` flag, promoted-piece dispa
 Done: S9 (Notation: `turnToSan`, `sanToTurn`, `serializeGame`, `parseGame`, `replayGame`; full round-trip property suite 21 matchups; game fixtures; Thrall homing `P`-prefix notation; Veil `(E:n→m)` essence annotation; Wild `~` exhaustion; Twins rally `;K...` and Shatter `K@sq`)  
 Done: S10 (PBM core: commit-reveal handshake, lz-string URL payloads, full replay validation, tampering tests, `docs/PBM-PROTOCOL.md`)  
 Done: S11 (Board UI + local hotseat: App shell, blind army-pick flow, Board component, GameScreen, chooser sheet, game-end modal, Playwright e2e harness)  
-Done: S12 (Army-special interaction UX: Twins two-phase input + Shatter preview + rally bar, Veil slide/teleport/teleport-capture highlight distinction, Phantom piercing-check hint bar, Accord banner-zone overlay + empowered badge, Wild rampage preview + exhausted-Stalker badge + armor radius overlay, midline marker, invasion progress tint, `src/ui/strings.ts`, `docs/checklists/S12-manual.md`, 5-army Playwright e2e suite)
+Done: S12 (Army-special interaction UX: Twins two-phase input + Shatter preview + rally bar, Veil slide/teleport/teleport-capture highlight distinction, Phantom piercing-check hint bar, Accord banner-zone overlay + empowered badge, Wild rampage preview + exhausted-Stalker badge + armor radius overlay, midline marker, invasion progress tint, `src/ui/strings.ts`, `docs/checklists/S12-manual.md`, 5-army Playwright e2e suite)  
+Done: S13 (PBM UI + Persistence: share/import flows, `Transport` + `LocalStorageTransport`, local-game auto-save, PBM create/respond/reveal flows, `ShareScreen` overlay, `ImportScreen`, `ConflictScreen`, `SaltMissingScreen`, `ReplayScreen`, `GamesListScreen`, `PBMCreateScreen`, `PBMRespondScreen`, `GameScreen` `myColor` prop + waiting banner, `HomeScreen` 4-button layout, `hashchange` routing, lz-string CJS interop fix, two-context Fool's Mate Playwright e2e, refresh-resume, tamper detection, conflict screen, replay mode tests)
 
 **No remaining engine todos.**
 
@@ -119,6 +120,35 @@ Done: S12 (Army-special interaction UX: Twins two-phase input + Shatter preview 
 | `ValidationResult`, `ValidationError` | Typed success/failure union |
 
 Protocol doc: `docs/PBM-PROTOCOL.md`
+
+## Transport seam (`src/app/transport.ts`)
+
+The network-addon boundary for a future cloud backend. Currently implemented as `LocalStorageTransport` (exported singleton `transport`).
+
+```ts
+interface Transport {
+  loadGame(id: string): PBMPayload | null;
+  saveGame(id: string, payload: PBMPayload): void;
+  listGames(): Array<{ id: string; payload: PBMPayload }>;
+  deleteGame(id: string): void;
+  loadMeta(id: string): LocalGameMeta | null;
+  saveMeta(id: string, meta: LocalGameMeta): void;
+}
+
+interface LocalGameMeta {
+  myColor: Color;
+  isLocal?: boolean;          // true for hotseat games
+  commit?: { army: Army; salt: string };  // held only during commit phase
+}
+```
+
+localStorage keys: `schism-game-{id}` for payloads, `schism-meta-{id}` for metadata.
+
+**Degenerate local payload**: hotseat games stored as `phase: 'play'` `PBMPayload` with sentinel `commit.hash = '0'.repeat(64)` and no `reveal`. Since `validatePayload` skips hash check when `reveal` is absent, the sentinel is never verified. `meta.isLocal = true` distinguishes these from real PBM games.
+
+**Monotonic history guard**: `checkMonotonicGuard(stored, incoming)` — exported from transport. Returns `false` if `incoming.moves` is shorter than `stored.moves` or diverges at any ply. App shows `ConflictScreen` on failure.
+
+**Browser hasher**: `src/app/hasher.ts` exports `browserHasher: Hasher` (Web Crypto SHA-256) and `generateSalt(): string` (16 random bytes → 32 hex chars).
 
 ## Kernel API (frozen — army sessions extend via registries only)
 
