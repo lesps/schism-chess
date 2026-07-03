@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import type { GameState, Turn } from '../../engine/types';
-import { getPieceGlyph, PIECE_COLORS } from '../shared';
+import { PIECE_COLORS } from '../shared';
+import { PieceIcon } from '../pieceArt';
 import { turnToSan } from '../../engine';
 
 interface Props {
@@ -56,7 +58,7 @@ export function TurnChooser({ turns, gameState, onSelect, onCancel }: Props) {
 
 interface OptionDesc {
   label: string;
-  glyph: string | null;
+  glyph: ReactNode | null;
   glyphColor: string | null;
   desc: string | null;
 }
@@ -69,7 +71,7 @@ function describeOption(turn: Turn, state: GameState): OptionDesc {
   // Promotion
   if (p.type === 'standard' && p.promotion) {
     const slot = p.promotion;
-    const glyph = getPieceGlyph(slot, sideToMove);
+    const glyph = <PieceIcon slot={slot} color={sideToMove} army={army} promoted />;
     const color = PIECE_COLORS[army][sideToMove];
     const slotNames: Record<typeof slot, string> = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', K: 'King', P: 'Pawn' };
     return { label: `Promote to ${slotNames[slot]}`, glyph, glyphColor: color, desc: null };

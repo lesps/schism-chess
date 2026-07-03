@@ -16,12 +16,16 @@ import { useGameLogic, turnsForMove } from '../hooks/useGameLogic';
 import {
   ARMY_ACCENTS,
   ARMY_NAMES,
+  PIECE_COLORS,
   armorZone,
+  getPieceInfo,
   getPrimaryFrom,
+  getSlotName,
   hasCrossedMidline,
   primaryEq,
   squareNeighbors,
 } from '../shared';
+import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
 
 interface Props {
@@ -179,6 +183,9 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     }
     return null;
   }, [twinsStagingTurns, checkedSquares, movingArmy, opponentArmy, selectedSquare, exhaustedSquares, gameState.board]);
+
+  // ── Selected-piece reminder ──
+  const selectedPiece = selectedSquare !== null ? gameState.board[selectedSquare] : null;
 
   // ── Shatter legality for selected Warlord ──
   const shatterLegalForSelected = useMemo((): boolean => {
@@ -339,6 +346,32 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
 
       {/* Hint bar */}
       <HintBar message={hint} />
+
+      {/* Selected-piece reminder */}
+      {selectedPiece && twinsStagingTurns === null && (() => {
+        const pArmy = armies[selectedPiece.color];
+        const promoted = selectedPiece.promoted ?? false;
+        return (
+          <div className="piece-info-bar" data-testid="piece-info">
+            <span
+              className="piece-info-icon"
+              style={{ color: PIECE_COLORS[pArmy][selectedPiece.color] }}
+              aria-hidden
+            >
+              <PieceIcon slot={selectedPiece.slot} color={selectedPiece.color} army={pArmy} promoted={promoted} />
+            </span>
+            <span className="piece-info-text">
+              <strong className="piece-info-name" style={{ color: ARMY_ACCENTS[pArmy] }}>
+                {getSlotName(selectedPiece.slot, pArmy, promoted)}
+                {promoted ? ' (promoted)' : ''}
+              </strong>
+              <span className="piece-info-desc">
+                {getPieceInfo(selectedPiece.slot, pArmy, promoted)}
+              </span>
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Shatter mode button (shown when Warlord selected and shatter is legal) */}
       {shatterLegalForSelected && shatterPreviewSq === null && twinsStagingTurns === null && (
