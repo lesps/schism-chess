@@ -74,7 +74,7 @@ Done: S14 (**v1.0.0 shipped** — polish, docs, deploy: `README.md`, `docs/ARCHI
 
 The following are deferred and tracked as GitHub issues:
 
-1. **SVG piece set** — replace Unicode glyphs with original SVGs behind the existing `PieceGlyph` seam. The slot/color API is unchanged; only the visual output changes.
+1. ~~**SVG piece set**~~ — **done post-1.0**: original inline SVGs in `src/ui/pieceArt.tsx` (`PieceIcon`), rendered behind the `PieceGlyph` seam. Standard FIDE set + 10 army-specific shapes (Shade, Thrall, Herald, Warlord, Wraith, Wisp, Apex, Behemoth, Stalker, Bronco); promoted pieces fall back to the standard set. Also added: selected-piece move-reminder bar (`getPieceInfo` in `shared.ts`, rendered by `GameScreen`, tested in `tests/ui/pieceArt.test.tsx`).
 2. **Network backend** — plug in a server as a payload mailbox above the `Transport` interface (see `docs/PBM-PROTOCOL.md §Network` and `docs/ARCHITECTURE.md §Transport seam`). No other code changes needed.
 3. **Sound** — move/capture/check audio; `prefers-reduced-motion` + a mute toggle.
 4. **AI opponent** — single-player mode; engine is already pure TS so a WASM worker is natural.

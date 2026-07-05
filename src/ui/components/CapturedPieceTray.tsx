@@ -1,5 +1,6 @@
 import type { Army, Color, Piece } from '../../engine/types';
-import { getPieceGlyph, PIECE_COLORS } from '../shared';
+import { PIECE_COLORS } from '../shared';
+import { PieceIcon } from '../pieceArt';
 
 interface Props {
   captured: { W: Piece[]; B: Piece[] };
@@ -26,7 +27,7 @@ export function CapturedPieceTray({ captured, armies }: Props) {
                 style={{ color: PIECE_COLORS[army][color] }}
                 aria-hidden
               >
-                {getPieceGlyph(p.slot, p.color)}
+                <PieceIcon slot={p.slot} color={p.color} army={army} promoted={p.promoted} />
               </span>
             ))}
           </div>
