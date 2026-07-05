@@ -1,18 +1,22 @@
 // Centralised hint & UI strings for army-specific interactions.
-// S14 may localise or link these to in-app rules pages.
+// Keep these plain and action-oriented: say what the player can/cannot
+// do right now, not just the rule's name. E2e tests match on the
+// phrases "Piercing check" and "Exhausted" — keep those words.
 
 export const HINTS = {
-  TWINS_WARLORD_IN_CHECK: 'Warlord in check — primary move must resolve it.',
-  TWINS_RALLY_PHASE: 'Rally: move a Warlord one step, or skip.',
-  TWINS_SHATTER_ILLEGAL_ADJACENT: 'Shatter blocked — Warlords are adjacent.',
-  TWINS_SHATTER_DESC: 'Destroys all adjacent pieces. Then rally (optional).',
-  PIERCING_CHECK: 'Piercing check — interposition impossible.',
-  STALKER_EXHAUSTED: 'Exhausted — cannot capture this turn.',
-  BEHEMOTH_ARMOR_DESC: 'Armor: enemies must be within 2 squares to capture this Behemoth.',
-  RAMPAGE_DESC: 'Rampage! Every piece on the path is swept away.',
-  HERALD_BANNER_DESC: 'Banner zone — friendly pieces here are Empowered.',
-  EMPOWERED_DESC: 'Empowered by the Herald — gains bonus moves.',
-  FRIENDLY_CAPTURE_CONFIRM: 'Capture your own piece?',
+  FIRST_MOVE: 'Tap one of your pieces to see its legal moves.',
+  TWINS_WARLORD_IN_CHECK: 'Warlord in check — your main move alone must escape it. Rally cannot save a lone checked Warlord.',
+  TWINS_BOTH_IN_CHECK: 'Both Warlords in check — use your move and your Rally together to bring both to safety.',
+  TWINS_RALLY_PHASE: 'Rally (optional): tap a pink dot to step a Warlord one square, or skip.',
+  TWINS_SHATTER_ILLEGAL_ADJACENT: 'Shatter unavailable — the Warlords are next to each other.',
+  TWINS_SHATTER_DESC: 'Destroys every piece around this Warlord — friend and foe. You can still Rally afterwards.',
+  PIERCING_CHECK: 'Piercing check — blocking is impossible. Move your King or capture the Shade.',
+  STALKER_EXHAUSTED: 'Stalker is Exhausted — it may move this turn, but not capture.',
+  BEHEMOTH_ARMOR_DESC: 'Armor: enemies can only capture this Behemoth from inside the tinted 2-square zone.',
+  RAMPAGE_DESC: 'the Behemoth clears every piece in its path, including your own.',
+  HERALD_BANNER_DESC: 'Banner zone — friendly Knights, Bishops and Rooks inside it gain a bonus king-step.',
+  EMPOWERED_DESC: 'Empowered by the Herald — may also move or capture one square in any direction.',
+  FRIENDLY_CAPTURE_CONFIRM: 'This captures your own piece. Continue?',
   SKIP_RALLY: 'Skip Rally',
   BACK: '← Back',
   CONFIRM: 'Confirm',

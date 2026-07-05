@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Army, Color, RampageMove, Square, Turn } from '../../engine/types';
+import { applyTurnUnchecked } from '../../engine';
 import { bannerZone } from '../../engine/accord';
-import { Board, getDestinationsForOrigin } from '../components/Board';
+import { Board } from '../components/Board';
 import type { OverlayKind } from '../components/Board';
 import { CapturedPieceTray } from '../components/CapturedPieceTray';
 import { EssenceMeter } from '../components/EssenceMeter';
@@ -84,6 +85,16 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   const lastEntry = history[history.length - 1] ?? null;
   const lastMovePrimary = lastEntry?.turn.primary ?? null;
 
+  // ── Twins staging preview ──
+  // During the rally phase, show the board as it stands AFTER the chosen
+  // primary action, so rally dots relate to what the player actually sees.
+  const stagedPrimary = twinsStagingTurns?.[0]?.primary ?? null;
+  const displayState = useMemo(() => {
+    if (stagedPrimary === null) return gameState;
+    return applyTurnUnchecked(gameState, { primary: stagedPrimary });
+  }, [stagedPrimary, gameState]);
+  const isStaging = twinsStagingTurns !== null;
+
   const { sideToMove, armies } = gameState;
   const movingArmy = armies[sideToMove];
   const opponentColor = sideToMove === 'W' ? 'B' : 'W';
@@ -98,10 +109,21 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     const map = new Map<Square, OverlayKind>();
     for (const color of ['W', 'B'] as const) {
       if (armies[color] !== 'Accord') continue;
-      for (const sq of bannerZone(gameState.board, color)) map.set(sq, 'banner');
+      for (const sq of bannerZone(displayState.board, color)) map.set(sq, 'banner');
     }
     return map;
-  }, [gameState.board, armies]);
+  }, [displayState.board, armies]);
+
+  // Twins staging: tint the squares of Warlords that can still rally,
+  // so the player knows which piece the pink destination dots belong to.
+  const rallyFromSquares = useMemo((): Map<Square, OverlayKind> => {
+    const map = new Map<Square, OverlayKind>();
+    if (twinsStagingTurns === null) return map;
+    for (const t of twinsStagingTurns) {
+      if (t.rally) map.set(t.rally.from, 'rally-from');
+    }
+    return map;
+  }, [twinsStagingTurns]);
 
   // Wild: Armor zone around selected Behemoth
   const armorSquares = useMemo((): Map<Square, OverlayKind> => {
@@ -121,22 +143,23 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     return map;
   }, [shatterPreviewSq]);
 
-  // Combined overlay map (blast > armor > banner)
+  // Combined overlay map (blast > armor > rally-from > banner)
   const overlaySquares = useMemo((): Map<Square, OverlayKind> => {
     const map = new Map<Square, OverlayKind>(bannerSquares);
+    for (const [sq, kind] of rallyFromSquares) map.set(sq, kind);
     for (const [sq, kind] of armorSquares) map.set(sq, kind);
     for (const [sq, kind] of blastSquares) map.set(sq, kind);
     return map;
-  }, [bannerSquares, armorSquares, blastSquares]);
+  }, [bannerSquares, rallyFromSquares, armorSquares, blastSquares]);
 
   // Accord: Empowered piece squares (friendly non-pawn/herald in banner zone)
   const empoweredSquares = useMemo((): Set<Square> => {
     const result = new Set<Square>();
     for (const color of ['W', 'B'] as const) {
       if (armies[color] !== 'Accord') continue;
-      const zone = bannerZone(gameState.board, color);
+      const zone = bannerZone(displayState.board, color);
       for (const sq of zone) {
-        const piece = gameState.board[sq];
+        const piece = displayState.board[sq];
         if (!piece || piece.color !== color) continue;
         // Pawns are never empowered; Herald (Q-slot, non-promoted) is the anchor, not empowered itself
         if (piece.slot === 'P') continue;
@@ -145,7 +168,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
       }
     }
     return result;
-  }, [gameState.board, armies]);
+  }, [displayState.board, armies]);
 
   // Wild: Exhausted squares (from gameState.exhausted)
   const exhaustedSquares = useMemo(
@@ -157,18 +180,19 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   const invasionSquares = useMemo((): Set<Square> => {
     const result = new Set<Square>();
     for (let sq = 0; sq < 64; sq++) {
-      const piece = gameState.board[sq];
+      const piece = displayState.board[sq];
       if (!piece || piece.slot !== 'K') continue;
       if (hasCrossedMidline(sq, piece.color)) result.add(sq);
     }
     return result;
-  }, [gameState.board]);
+  }, [displayState.board]);
 
   // ── Hint message ──
   const hint = useMemo((): string | null => {
-    if (twinsStagingTurns !== null) return HINTS.TWINS_RALLY_PHASE;
+    if (twinsStagingTurns !== null) return null; // rally bar carries the instruction
     if (checkedSquares.length > 0) {
       if (movingArmy === 'Twins' && checkedSquares.length === 1) return HINTS.TWINS_WARLORD_IN_CHECK;
+      if (movingArmy === 'Twins' && checkedSquares.length >= 2) return HINTS.TWINS_BOTH_IN_CHECK;
       if (opponentArmy === 'Phantom') return HINTS.PIERCING_CHECK;
     }
     if (movingArmy === 'Wild' && selectedSquare !== null) {
@@ -177,8 +201,13 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         if (piece?.slot === 'B') return HINTS.STALKER_EXHAUSTED;
       }
     }
+    if (
+      history.length === 0 &&
+      selectedSquare === null &&
+      (myColor === undefined || sideToMove === myColor)
+    ) return HINTS.FIRST_MOVE;
     return null;
-  }, [twinsStagingTurns, checkedSquares, movingArmy, opponentArmy, selectedSquare, exhaustedSquares, gameState.board]);
+  }, [twinsStagingTurns, checkedSquares, movingArmy, opponentArmy, selectedSquare, exhaustedSquares, gameState.board, history.length, myColor, sideToMove]);
 
   // ── Shatter legality for selected Warlord ──
   const shatterLegalForSelected = useMemo((): boolean => {
@@ -216,6 +245,14 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
 
       if (destTurns.length > 0) {
         const first = destTurns[0];
+
+        // Tapping the selected Warlord again = Shatter (dest === from only
+        // exists for Shatter). Always route through the confirmation preview —
+        // never silently destroy everything around the Warlord.
+        if (first.primary.type === 'shatter') {
+          setShatterPreviewSq(selectedSquare);
+          return;
+        }
 
         // Rampage: always single turn per from→to; show preview
         if (first.primary.type === 'rampage') {
@@ -280,11 +317,6 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     }
   }
 
-  const destinationsMap = selectedSquare !== null
-    ? getDestinationsForOrigin(legalMovesForSelected, selectedSquare)
-    : new Map<Square, Turn[]>();
-  void destinationsMap;
-
   function handleFlipToggle() {
     if (autoFlip) {
       setAutoFlip(false);
@@ -335,6 +367,17 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         >
           {flipLabel}
         </button>
+        {onRules && (
+          <button
+            className="flip-btn"
+            onClick={() => onRules('')}
+            aria-label="Open rules"
+            title="Rules"
+            data-testid="game-rules-btn"
+          >
+            ?
+          </button>
+        )}
       </header>
 
       {/* Hint bar */}
@@ -379,15 +422,16 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         </div>
       )}
 
-      {/* Board */}
+      {/* Board — during Twins staging, shows the position after the chosen
+          primary action so the rally dots match what the player sees. */}
       <div className="board-wrapper">
         <Board
-          gameState={gameState}
+          gameState={displayState}
           flipped={flipped}
-          selectedSquare={selectedSquare}
-          legalMovesForSelected={twinsStagingTurns !== null ? [] : legalMovesForSelected}
-          lastMovePrimary={lastMovePrimary}
-          checkedSquares={checkedSquares}
+          selectedSquare={isStaging ? null : selectedSquare}
+          legalMovesForSelected={isStaging ? [] : legalMovesForSelected}
+          lastMovePrimary={isStaging ? stagedPrimary : lastMovePrimary}
+          checkedSquares={isStaging ? [] : checkedSquares}
           onSquareClick={handleSquareClick}
           overlaySquares={overlaySquares}
           rallyTurns={twinsStagingTurns ?? undefined}
