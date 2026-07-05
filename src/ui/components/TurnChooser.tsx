@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { GameState, Turn } from '../../engine/types';
 import { PIECE_COLORS } from '../shared';
 import { PieceIcon } from '../pieceArt';
+import { HINTS } from '../strings';
 import { turnToSan } from '../../engine';
 
 interface Props {
@@ -79,7 +80,13 @@ function describeOption(turn: Turn, state: GameState): OptionDesc {
 
   // Shatter
   if (p.type === 'shatter') {
-    return { label: 'Shatter', glyph: '💥', glyphColor: null, desc: 'Destroy all adjacent pieces' };
+    return { label: 'Shatter', glyph: '💥', glyphColor: null, desc: 'Destroys every piece around this Warlord — friend and foe' };
+  }
+
+  // Friendly capture (Wild Bronco/Behemoth taking its own piece) — warn clearly
+  if (p.type === 'standard' && state.board[p.to]?.color === sideToMove) {
+    const san = turnToSan(state, turn);
+    return { label: san, glyph: '⚠', glyphColor: '#f0a840', desc: HINTS.FRIENDLY_CAPTURE_CONFIRM };
   }
 
   // Rally variants (same primary, different rallies)

@@ -4,11 +4,11 @@ async function startLocalGame(page: import('@playwright/test').Page) {
   await page.goto('/schism-chess/');
   await page.getByRole('button', { name: 'New local game' }).click();
   await page.getByRole('button', { name: "I'm ready →" }).click();
-  await page.getByRole('button', { name: 'The Crown' }).click();
+  await page.getByRole('button', { name: 'The Crown', exact: true }).click();
   await page.getByRole('button', { name: 'Done →' }).click();
   await page.getByRole('button', { name: 'Player 2 is ready →' }).click();
   await page.getByRole('button', { name: "I'm ready →" }).click();
-  await page.getByRole('button', { name: 'The Crown' }).click();
+  await page.getByRole('button', { name: 'The Crown', exact: true }).click();
   await page.getByRole('button', { name: 'Done →' }).click();
   await page.getByTestId('start-game').click();
 }
@@ -73,7 +73,7 @@ test.describe('SAN input — keyboard play', () => {
   test('Rules link appears on home screen', async ({ page }) => {
     await expect(page.getByTestId('rules-link')).toBeVisible();
     await page.getByTestId('rules-link').click();
-    // Rules screen should show
-    await expect(page.getByText('Win Conditions')).toBeVisible();
+    // Rules screen should show (heading role: the TOC link shares the text)
+    await expect(page.getByRole('heading', { name: 'Win Conditions' })).toBeVisible();
   });
 });

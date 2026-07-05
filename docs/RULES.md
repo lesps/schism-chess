@@ -9,21 +9,21 @@ A chess variant inspired by David Sirlin's Chess 2: The Sequel. Six asymmetric a
 ## Table of Contents
 
 1. [Overview](#overview)
-1. [Win Conditions](#win-conditions)
-1. [Army Selection](#army-selection)
-1. [Universal Rules](#universal-rules)
-1. [The Six Armies](#the-six-armies)
+2. [Win Conditions](#win-conditions)
+3. [Army Selection](#army-selection)
+4. [Universal Rules](#universal-rules)
+5. [The Six Armies](#the-six-armies)
 - [The Crown](#1-the-crown)
 - [The Phantom](#2-the-phantom)
 - [The Accord](#3-the-accord)
 - [The Twins](#4-the-twins)
 - [The Veil](#5-the-veil)
 - [The Wild](#6-the-wild)
-1. [Promotion](#promotion)
-1. [Draws](#draws)
-1. [Notation](#notation)
-1. [Design Notes](#design-notes)
-1. [Changelog](#changelog)
+6. [Promotion](#promotion)
+7. [Draws](#draws)
+8. [Notation](#notation)
+9. [Design Notes](#design-notes)
+10. [Changelog](#changelog)
 
 -----
 

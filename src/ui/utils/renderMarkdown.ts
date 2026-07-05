@@ -1,7 +1,7 @@
 /**
  * Minimal Markdown-to-HTML renderer for RULES.md display.
  * Handles: ATX headings, paragraphs, bold, italic, inline code,
- * unordered lists, tables, blockquotes, horizontal rules, links.
+ * unordered + ordered lists, tables, blockquotes, horizontal rules, links.
  * Not a general-purpose renderer — tuned to the subset used in RULES.md.
  */
 
@@ -118,14 +118,49 @@ export function renderMarkdown(md: string): string {
       continue;
     }
 
-    // Unordered list
-    if (/^[-*]\s/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
-        items.push(`<li>${inlineMarkdown(escapeHtml(lines[i].replace(/^[-*]\s/, '')))}</li>`);
+    // Unordered list (one level of nesting via indentation, e.g. the
+    // Twins "answering checks" sub-rules)
+    if (/^\s*[-*]\s/.test(line)) {
+      const items: Array<{ indent: number; text: string }> = [];
+      while (i < lines.length && /^\s*[-*]\s/.test(lines[i])) {
+        const indent = lines[i].match(/^(\s*)/)![1].length;
+        const text = inlineMarkdown(escapeHtml(lines[i].replace(/^\s*[-*]\s/, '')));
+        items.push({ indent, text });
         i++;
       }
-      output.push(`<ul>${items.join('')}</ul>`);
+      let html = '<ul>';
+      let liOpen = false;
+      let nested = false;
+      for (const it of items) {
+        if (it.indent > 0) {
+          if (!liOpen) { html += '<li>'; liOpen = true; }
+          if (!nested) { html += '<ul>'; nested = true; }
+          html += `<li>${it.text}</li>`;
+        } else {
+          if (nested) { html += '</ul>'; nested = false; }
+          if (liOpen) html += '</li>';
+          html += `<li>${it.text}`;
+          liOpen = true;
+        }
+      }
+      if (nested) html += '</ul>';
+      if (liOpen) html += '</li>';
+      html += '</ul>';
+      output.push(html);
+      continue;
+    }
+
+    // Ordered list. The `start` attribute preserves numbering when a list is
+    // interrupted by a nested block (e.g. the TOC's army sub-links).
+    const olMatch = line.match(/^(\d+)\.\s/);
+    if (olMatch) {
+      const start = olMatch[1];
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(`<li>${inlineMarkdown(escapeHtml(lines[i].replace(/^\d+\.\s/, '')))}</li>`);
+        i++;
+      }
+      output.push(`<ol${start !== '1' ? ` start="${start}"` : ''}>${items.join('')}</ol>`);
       continue;
     }
 
@@ -137,7 +172,7 @@ export function renderMarkdown(md: string): string {
 
     // Paragraph: collect lines until blank
     const paraLines: string[] = [];
-    while (i < lines.length && lines[i].trim() !== '' && !lines[i].startsWith('#') && !lines[i].startsWith('|') && !lines[i].startsWith('```') && !lines[i].startsWith('> ') && !/^[-*]\s/.test(lines[i]) && !/^-{3,}$/.test(lines[i].trim())) {
+    while (i < lines.length && lines[i].trim() !== '' && !lines[i].startsWith('#') && !lines[i].startsWith('|') && !lines[i].startsWith('```') && !lines[i].startsWith('> ') && !/^\s*[-*]\s/.test(lines[i]) && !/^\d+\.\s/.test(lines[i]) && !/^-{3,}$/.test(lines[i].trim())) {
       paraLines.push(lines[i]);
       i++;
     }

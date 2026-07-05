@@ -6,6 +6,7 @@ import {
   chebyshev,
   getPrimaryDest,
   getPrimaryFrom,
+  getSlotName,
   hasCrossedMidline,
   isLightSquare,
   squareFile,
@@ -96,13 +97,15 @@ export function Board({
 
         const isEmpowered = empoweredSquares?.has(sq);
         const isExhausted = exhaustedSquares?.has(sq);
+        const label = squareLabel(sq, piece, armies, isEmpowered, isExhausted);
 
         return (
           <div
             key={sq}
             className={classes}
             role="gridcell"
-            aria-label={squareLabel(sq, piece, armies)}
+            aria-label={label}
+            title={piece ? label : undefined}
             data-sq={sq}
             data-rank={rank}
             onClick={() => onSquareClick(sq)}
@@ -169,6 +172,8 @@ function squareLabel(
   sq: Square,
   piece: ReturnType<typeof Array.prototype.find> | null,
   armies: GameState['armies'],
+  empowered?: boolean,
+  exhausted?: boolean,
 ): string {
   const file = String.fromCharCode(97 + (sq % 8));
   const rank = Math.floor(sq / 8) + 1;
@@ -176,7 +181,9 @@ function squareLabel(
   if (!piece) return coord;
   const p = piece as NonNullable<GameState['board'][number]>;
   const army = armies[p.color];
-  return `${coord}: ${p.color === 'W' ? 'White' : 'Black'} ${army} ${p.slot}`;
+  const name = getSlotName(p.slot, army, p.promoted ?? false);
+  const status = empowered ? ' — Empowered' : exhausted ? ' — Exhausted' : '';
+  return `${coord}: ${p.color === 'W' ? 'White' : 'Black'} ${name}${status}`;
 }
 
 // ─── Derived destination count for each origin ───────────────────────────────

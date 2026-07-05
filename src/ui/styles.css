@@ -220,6 +220,11 @@ body {
   gap: 10px;
 }
 
+.army-card-wrap {
+  position: relative;
+  display: flex;
+}
+
 .army-card {
   background: var(--surface);
   border: 2px solid var(--border);
@@ -232,6 +237,7 @@ body {
   flex-direction: column;
   gap: 4px;
   min-height: 96px;
+  width: 100%;
 }
 .army-card:active { opacity: 0.8; }
 .army-card.selected {
@@ -505,21 +511,31 @@ body {
 .board-sq.overlay-rally-from:not(.hl-selected):not(.hl-check):not(.hl-last-from):not(.hl-last-to)::before {
   background: var(--overlay-rally-from);
 }
+/* Ring marks the Warlord(s) that can rally — box-shadow so it shows even when
+   a ::before highlight (e.g. last-move) also applies to the square. */
+.board-sq.overlay-rally-from {
+  box-shadow: inset 0 0 0 3px var(--hl-rally);
+}
 
 /* Invasion progress: subtle green tint on crossed royals */
 .board-sq.hl-invaded::before {
   background: var(--hl-invaded);
 }
 
-/* Midline marker (between rank 4 and rank 5 = 50% of board height) */
+/* Midline marker (between rank 4 and rank 5 = 50% of board height).
+   Dashed so it reads as a boundary (the invasion line), not a board seam. */
 .board-wrapper::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
-  top: 50%;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.14);
+  top: calc(50% - 1px);
+  height: 2px;
+  background: repeating-linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.35) 0 10px,
+    transparent 10px 18px
+  );
   pointer-events: none;
   z-index: 3;
 }
@@ -1092,16 +1108,20 @@ body {
 
 /* ─── S14: Polish, rules, SAN input ─── */
 
-/* Army card: header row with name + rules link */
+/* Army card: header row with name; rules link overlays the corner
+   (sibling of the card button — see ArmyPicker) */
 .army-card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 4px;
+  padding-right: 22px; /* keep the name clear of the "?" overlay */
 }
 
 .army-card-rules-link {
-  background: none;
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 50%;
   color: var(--text-muted);
@@ -1200,6 +1220,13 @@ body {
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
+  flex: 1;
+}
+
+.rules-top {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 .rules-content {
@@ -1252,6 +1279,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.rules-content ol {
+  margin: 0 0 12px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rules-content ul ul {
+  margin: 4px 0 0 18px;
 }
 .rules-content li {
   font-size: 14px;
