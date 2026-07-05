@@ -46,7 +46,7 @@ test.describe('PBM: two-context full game', () => {
     await pageA.getByTestId('pick-white').click();
     await pageA.getByTestId('color-next').click();
     await pageA.getByTestId('privacy-ready').click();
-    await pageA.getByRole('button', { name: 'The Crown' }).click();
+    await pageA.getByRole('button', { name: 'The Crown', exact: true }).click();
     await pageA.getByTestId('create-game').click();
 
     // A sees ShareScreen with commit payload
@@ -71,7 +71,7 @@ test.describe('PBM: two-context full game', () => {
     // B sees PBMRespondScreen
     await expect(pageB.getByTestId('respond-label')).toBeVisible({ timeout: 8000 });
     await pageB.getByTestId('respond-label').fill('Bob');
-    await pageB.getByRole('button', { name: 'The Crown' }).click();
+    await pageB.getByRole('button', { name: 'The Crown', exact: true }).click();
     await pageB.getByTestId('respond-submit').click();
 
     // B sees ShareScreen with respond (reveal) payload
@@ -199,11 +199,11 @@ test.describe('Refresh resume', () => {
     // Start a local game (Crown vs Crown)
     await page.getByRole('button', { name: 'New local game' }).click();
     await page.getByRole('button', { name: "I'm ready →" }).click();
-    await page.getByRole('button', { name: 'The Crown' }).click();
+    await page.getByRole('button', { name: 'The Crown', exact: true }).click();
     await page.getByRole('button', { name: 'Done →' }).click();
     await page.getByRole('button', { name: 'Player 2 is ready →' }).click();
     await page.getByRole('button', { name: "I'm ready →" }).click();
-    await page.getByRole('button', { name: 'The Crown' }).click();
+    await page.getByRole('button', { name: 'The Crown', exact: true }).click();
     await page.getByRole('button', { name: 'Done →' }).click();
     await page.getByTestId('start-game').click();
 
