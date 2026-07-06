@@ -13,11 +13,31 @@ export const ARMY_NAMES: Record<Army, string> = {
 
 export const ARMY_TAGLINES: Record<Army, string> = {
   Crown:   'Highest raw material; castles; flexible',
-  Phantom: 'Shade gives piercing check; homing Thralls',
+  Phantom: 'Ghostwalking Shade; piercing check; homing Thralls',
   Accord:  'Herald Banner empowers your phalanx',
   Twins:   'Two royals; Rally action; Shatter',
   Veil:    'Essence-gated teleporting Wraith',
   Wild:    'Chancellor, siege engine, ambush predator',
+};
+
+// Two-to-three sentence identity summaries, distilled from docs/RULES.md.
+// Shown in the in-game army info sheet.
+export const ARMY_IDENTITIES: Record<Army, string> = {
+  Crown:   'The benchmark army: standard chess. It owns the only true Queen, the only castling, and can always re-promote to Queen. No tricks — it wins by conventional pressure and is never structurally lost.',
+  Phantom: 'A relentless hunter. The Shade never captures but Ghostwalks through pieces and gives piercing check — blocking is impossible, so the enemy King must run or someone must hunt the Shade down. Homing Thralls creep toward the enemy King to close the net.',
+  Accord:  'A phalanx built around its standard-bearer. Friendly Knights, Bishops, and Rooks inside the Herald’s 3×3 Banner gain a bonus king-step for everything they do. Devastating while the formation holds — and it collapses the moment the Herald falls.',
+  Twins:   'Two royal Warlords and the best action economy in the game: move, then optionally Rally one Warlord a free step. Shatter annihilates everything around a Warlord. Both must cross the midline to invade — and both must be kept safe.',
+  Veil:    'A resource-gated assassin. The Wraith moves as a Queen or teleports anywhere, paying 1 Essence per capture — at 0 Essence it goes inert. Feed it by capturing enemy pawns with your minor pieces; its Wisps teleport to block and obstruct.',
+  Wild:    'Unorthodox aggression at short range: the Apex leaps like a rook-knight, armored Behemoths rampage through whole files, Stalkers strike and slip back home, and Broncos trample even their own. Slow to develop, brutal up close.',
+};
+
+export const ARMY_RULE_ANCHORS: Record<Army, string> = {
+  Crown:   '1-the-crown',
+  Phantom: '2-the-phantom',
+  Accord:  '3-the-accord',
+  Twins:   '4-the-twins',
+  Veil:    '5-the-veil',
+  Wild:    '6-the-wild',
 };
 
 export const ARMIES: Army[] = ['Crown', 'Phantom', 'Accord', 'Twins', 'Veil', 'Wild'];
@@ -44,16 +64,6 @@ export const ARMY_ACCENTS: Record<Army, string> = {
   Wild:    '#f0a840',
 };
 
-// ─── Unicode chess glyphs ─────────────────────────────────────────────────────
-// White-piece glyphs (hollow/outlined) for W; Black-piece glyphs (filled) for B
-
-const W_GLYPHS: Record<Slot, string> = { K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙' };
-const B_GLYPHS: Record<Slot, string> = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟' };
-
-export function getPieceGlyph(slot: Slot, color: Color): string {
-  return color === 'W' ? W_GLYPHS[slot] : B_GLYPHS[slot];
-}
-
 export function getSlotName(slot: Slot, army: Army, promoted: boolean): string {
   if (promoted) return slotBaseName(slot);
   return SLOT_NAMES[army]?.[slot] ?? slotBaseName(slot);
@@ -71,6 +81,50 @@ const SLOT_NAMES: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
   Veil:    { Q: 'Wraith', R: 'Wisp' },
   Wild:    { Q: 'Apex', R: 'Behemoth', B: 'Stalker', N: 'Bronco' },
 };
+
+// ─── Piece move reminders (shown while a piece is selected) ──────────────────
+
+const STANDARD_PIECE_INFO: Record<Slot, string> = {
+  K: 'Royal. Steps one square in any direction. Cross the midline to win by invasion.',
+  Q: 'Slides any distance along ranks, files, and diagonals.',
+  R: 'Slides any distance along ranks and files.',
+  B: 'Slides any distance along diagonals.',
+  N: 'Jumps in an L-shape, over anything in the way.',
+  P: 'Steps forward one; captures one square diagonally forward; promotes on the last rank.',
+};
+
+const ARMY_PIECE_INFO: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
+  Crown: {
+    K: 'Royal. Steps one square in any direction; may castle. Cross the midline to win by invasion.',
+    P: 'Forward one (two from start); captures diagonally; en passant; promotes on the last rank.',
+  },
+  Phantom: {
+    Q: 'Ghostwalks along Queen lines — drifts through pieces, landing only on empty squares. Never captures. Its check pierces: blocking is impossible; move the King or take the Shade.',
+    P: 'Forward one (no double step); captures diagonally; or homes one step toward the enemy King. Promotes.',
+  },
+  Accord: {
+    Q: 'Steps one square, never captures. Friendly Knights, Bishops, and Rooks next to it are Empowered with a bonus king-step.',
+  },
+  Twins: {
+    K: 'Royal. Steps one square; afterwards one Warlord may Rally a free step. Can Shatter everything adjacent. Both Warlords past the midline wins.',
+  },
+  Veil: {
+    Q: 'Moves as a Queen or teleports to any empty square. Captures cost 1 Essence; checks need ≥1 — at 0 Essence it is inert.',
+    R: 'Teleports to any empty square. Never captures and threatens nothing.',
+  },
+  Wild: {
+    Q: 'Chancellor: slides like a Rook or jumps like a Knight.',
+    R: 'Up to 3 squares orthogonally; capturing triggers a Rampage that clears the whole path. Enemies must be within 2 squares to capture it.',
+    B: 'Up to 2 squares diagonally. Strikes without moving (target dies, Stalker stays), then cannot capture on your next turn.',
+    N: 'Knight jumps — and may capture friendly pieces too.',
+  },
+};
+
+/** One-line reminder of what a piece does, keyed by army + slot. */
+export function getPieceInfo(slot: Slot, army: Army, promoted: boolean): string {
+  if (promoted) return STANDARD_PIECE_INFO[slot];
+  return ARMY_PIECE_INFO[army]?.[slot] ?? STANDARD_PIECE_INFO[slot];
+}
 
 // ─── Turn helpers ─────────────────────────────────────────────────────────────
 

@@ -1,14 +1,5 @@
 import type { Army } from '../../engine/types';
-import { ARMIES, ARMY_ACCENTS, ARMY_NAMES, ARMY_TAGLINES } from '../shared';
-
-const ARMY_RULE_ANCHORS: Record<Army, string> = {
-  Crown:   '1-the-crown',
-  Phantom: '2-the-phantom',
-  Accord:  '3-the-accord',
-  Twins:   '4-the-twins',
-  Veil:    '5-the-veil',
-  Wild:    '6-the-wild',
-};
+import { ARMIES, ARMY_ACCENTS, ARMY_NAMES, ARMY_RULE_ANCHORS, ARMY_TAGLINES } from '../shared';
 
 interface Props {
   selected: Army | null;

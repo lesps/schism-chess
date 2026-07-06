@@ -2,7 +2,7 @@
 
 ## 1.0.1 — 2026-07-06
 
-**v1.0.1 — Rules-fidelity bug fixes (rules v2.0.2)**
+**v1.0.1 — Rules-fidelity bug fixes (rules v2.1.1)**
 
 ### Engine fixes
 - **Phantom Thrall homing tightened** (the reported bug): bare Chebyshev reduction let Thralls sidestep to both forward diagonals when the enemy king was straight ahead, step diagonally *backward* when the king was due east/west, and (vs Twins' spread Warlords) qualify in all four diagonal directions. A homing step now must move genuinely toward a king: Chebyshev distance strictly decreases **and** neither the rank nor file distance increases (`stepHomesTowardKing` in `src/engine/phantom.ts`). `THRALL_HOMING_TWINS = 'either'` semantics unchanged.
@@ -11,7 +11,7 @@
 - **Essence gain restricted to Bishop/Knight/Pawn capturers** per RULES.md: a King (or promoted Rook) capturing an enemy pawn no longer generates Essence.
 
 ### Docs
-- `docs/RULES.md` → v2.0.2: homing rule rewritten (per-axis approach requirement); Shade-answer wording clarifies that every capture mechanism qualifies; changelog entry added.
+- `docs/RULES.md` → v2.1.1: homing rule rewritten (per-axis approach requirement); Shade-answer wording clarifies that every capture mechanism qualifies; changelog entry added.
 - `docs/RULES-INTERPRETATIONS.md`: four new rulings recorded under "Post-1.0 Fix Pass (v1.0.1)".
 
 ## 1.0.0 — 2026-06-30

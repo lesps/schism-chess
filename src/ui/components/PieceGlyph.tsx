@@ -1,5 +1,6 @@
 import type { Army, Color, Piece } from '../../engine/types';
-import { PIECE_COLORS, getPieceGlyph, getSlotName } from '../shared';
+import { PIECE_COLORS, getSlotName } from '../shared';
+import { PieceIcon } from '../pieceArt';
 
 interface Props {
   piece: Piece;
@@ -10,7 +11,6 @@ interface Props {
 
 export function PieceGlyph({ piece, armies, empowered, exhausted }: Props) {
   const army = armies[piece.color];
-  const glyph = getPieceGlyph(piece.slot, piece.color);
   const color = PIECE_COLORS[army][piece.color];
   const label = getSlotName(piece.slot, army, piece.promoted ?? false);
   const side: Color = piece.color;
@@ -30,7 +30,7 @@ export function PieceGlyph({ piece, armies, empowered, exhausted }: Props) {
       data-empowered={empowered ? 'true' : undefined}
       data-exhausted={exhausted ? 'true' : undefined}
     >
-      {glyph}
+      <PieceIcon slot={piece.slot} color={piece.color} army={army} promoted={piece.promoted} />
       {empowered && <span className="piece-badge piece-badge-empowered" aria-hidden>✦</span>}
       {exhausted && <span className="piece-badge piece-badge-exhausted" aria-hidden>⊗</span>}
     </span>

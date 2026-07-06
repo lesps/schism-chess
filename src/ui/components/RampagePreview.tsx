@@ -1,5 +1,6 @@
 import type { GameState, RampageMove, Turn } from '../../engine/types';
-import { getPieceGlyph, PIECE_COLORS } from '../shared';
+import { PIECE_COLORS } from '../shared';
+import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
 
 interface Props {
@@ -31,7 +32,7 @@ export function RampagePreview({ turn, gameState, onConfirm, onCancel }: Props) 
             if (!piece) return null;
             const isFriendly = piece.color === sideToMove;
             const army = armies[piece.color];
-            const glyph = getPieceGlyph(piece.slot, piece.color);
+            const glyph = <PieceIcon slot={piece.slot} color={piece.color} army={army} promoted={piece.promoted} />;
             const color = PIECE_COLORS[army][piece.color];
             return (
               <li
