@@ -41,10 +41,18 @@ function warlordChecks(board: GameState['board'], color: Color, baseState: GameS
   return warlordSquares(board, color).filter(sq => attacked.has(sq));
 }
 
-/** Apply a Shatter to a board copy — removes all pieces on the 8 surrounding squares. */
+/**
+ * Apply a Shatter to a board copy — removes all pieces on the 8 surrounding squares.
+ * Royals (K-slot) are spared (RULES v2.2): a paired Warlord is never harmed, so the
+ * adjacency restriction is gone. (An ENEMY royal can never legally be adjacent — it
+ * would already stand in check from this Warlord — so sparing all K-slots is safe.)
+ */
 export function applyShatterToBoard(board: GameState['board'], warlordSq: Square): GameState['board'] {
   const b = board.slice() as GameState['board'];
-  for (const n of neighbors(warlordSq)) b[n] = null;
+  for (const n of neighbors(warlordSq)) {
+    if (b[n]?.slot === 'K') continue;
+    b[n] = null;
+  }
   return b;
 }
 
@@ -167,9 +175,6 @@ function twinsGenerator(state: GameState): Turn[] {
   const checkedBefore = warlordChecks(board, color, state);
   const singleCheckBefore = checkedBefore.length === 1;
 
-  // Find warlord squares to detect adjacency for Shatter legality
-  const myWarlords = warlordSquares(board, color);
-
   // Collect primary-only turns (without rally)
   const primaryTurns: Turn[] = [];
 
@@ -185,16 +190,8 @@ function twinsGenerator(state: GameState): Turn[] {
         primaryTurns.push({ primary: { type: 'standard', from: sq, to } });
       }
 
-      // --- Shatter: illegal if the other Warlord is adjacent ---
-      const otherWarlords = myWarlords.filter(w => w !== sq);
-      const adjacentOther = otherWarlords.some(w => {
-        const dr = Math.abs((w >> 3) - (sq >> 3));
-        const df = Math.abs((w & 7) - (sq & 7));
-        return Math.max(dr, df) === 1;
-      });
-      if (!adjacentOther) {
-        primaryTurns.push({ primary: { type: 'shatter', warlordSquare: sq } });
-      }
+      // --- Shatter: always available; royals in the blast are spared (RULES v2.2) ---
+      primaryTurns.push({ primary: { type: 'shatter', warlordSquare: sq } });
     } else {
       // --- Non-Warlord pieces ---
       switch (piece.slot) {

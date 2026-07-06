@@ -1,4 +1,4 @@
-# Schism Chess — Rules v2.1.1
+# Schism Chess — Rules v2.2
 
 A chess variant inspired by David Sirlin's Chess 2: The Sequel. Six asymmetric armies, a midline invasion win condition, and no hidden information.
 
@@ -77,8 +77,8 @@ Quick identities and primary win lanes:
 |-------|------------------------------------------------------------|-----------------------------------|
 |Crown  |Highest raw material; only army that castles & over-promotes|Checkmate / flexible               |
 |Phantom|**Ghostwalking** Shade gives **piercing** check; homing Thralls|Zugzwang nets, checkmate           |
-|Accord |Herald **Banner** empowers a clustered phalanx              |Positional control, escort invasion|
-|Twins  |Two royal Warlords; Rally action economy; Shatter           |Invasion + tactical tempo          |
+|Accord |Herald **Banner** — the phalanx parts and strikes through itself|Positional control, escort invasion|
+|Twins  |Two royal Warlords; Rally action economy; Shatter (spares royals)|Invasion + tactical tempo          |
 |Veil   |Essence-gated teleporting Wraith that can now **check**     |Surgical checkmate + invasion      |
 |Wild   |Unorthodox attackers (chancellor, siege, ambush)            |Aggressive checkmate               |
 
@@ -146,14 +146,16 @@ Quick identities and primary win lanes:
 
 - The Herald projects a **Banner** over its own square and the 8 squares orthogonally/diagonally adjacent to it (a 3×3 zone).
 - A friendly **Knight, Bishop, or Rook standing inside the Banner is Empowered.**
-- **Empowered** pieces gain a **king-step** — in addition to their native movement, they may move *or capture* one square in any direction. (An Empowered Knight is a knight + king-step; an Empowered Bishop or Rook gains one-square moves in its off-directions, etc.)
-- Empowerment applies to **everything the piece does this turn**: movement, captures, giving check, and defending. Because membership in the Banner is a single glance ("is it in the Herald's 3×3?"), there is no adjacency graph to track and no hidden discovered-check bookkeeping.
+- **Empowered — the phalanx parts (v2.2).** For an Empowered piece, **friendly pieces do not block movement**:
+  - An Empowered **Rook or Bishop slides straight through friendly pieces** as if they weren't there. It may not *land* on a friendly square; enemy pieces still block (landing on the first one is a capture).
+  - An Empowered **Knight becomes a Nightrider**: its leap **repeats in a straight line** (b1→c3→d5→e7, …). Empty and friendly-occupied landing squares let the ride continue (it cannot land on a friendly square); the first enemy piece on a landing square is captured and ends the ride.
+- Empowerment applies to **everything the piece does**: movement, captures, giving check, and defending — an Empowered Rook behind its own pawn wall *attacks through it*. Because membership in the Banner is a single glance ("is it in the Herald's 3×3?"), there is no adjacency graph to track and no hidden discovered-check bookkeeping.
 - Empowerment is evaluated continuously from the **current board position**. A piece that leaves the Banner (or whose Herald is captured or moves away) reverts to its native movement immediately.
 - Pawns are never Empowered. A promoted Rook/Bishop/Knight is Empowered normally while in the Banner.
 
-> **Tuning knob (playtest):** if the Accord underperforms, upgrade Empowerment from "+king-step" to "moves as a Queen while in the Banner." The king-step version is the conservative starting point.
+> **v2.2 change.** Empowerment used to grant a bonus **king-step** (one square any direction). Playtesting found it boring and ~100 simulated games showed no empowerment-strength buff fixed the army — the design-notes diagnosis was that Accord needed "a way to break a king-safe wall," not more raw power. The phalanx rule is that fix: a turtled defense can no longer blockade the Accord out of the game, because the formation shoots through itself. (The legacy `king-step` and `queen` empowerment modes remain in the engine as experiment knobs.)
 
-**Identity:** The Accord is the highest-skill army and the clearest expression of the Counterplay Principle: its power is enormous when 3–5 pieces are packed around the mobile Herald, but it is a slow phalanx — to attack across the board a piece must leave the Banner and revert, and the **Herald itself is capturable.** The entire structure collapses the moment the keystone falls, so the opponent always has a target. The Accord wants to avoid trades and advance its formation intact (a natural midline-escort army).
+**Identity:** The Accord is the highest-skill army and the clearest expression of the Counterplay Principle: its power is enormous when 3–5 pieces are packed around the mobile Herald — the formation literally *parts to strike through itself* — but it is a slow phalanx: to attack across the board a piece must leave the Banner and revert, and the **Herald itself is capturable.** The entire structure collapses the moment the keystone falls, so the opponent always has a target. The Accord wants to avoid trades and advance its formation intact (a natural midline-escort army).
 
 -----
 
@@ -178,7 +180,8 @@ Quick identities and primary win lanes:
 **Shatter**
 
 - Instead of a normal move, a Warlord may Shatter: it stays in place and removes **all** pieces (friendly and enemy) on the 8 surrounding squares, **regardless of any protective ability they have.**
-- Illegal if the other Warlord is adjacent, or if the resulting position would leave either Warlord in check.
+- **Royals are spared (v2.2).** A Shatter never removes a Warlord or King. In particular, the two Warlords may stand side by side and still Shatter — the blast simply passes over the partner. (Warlords pair up naturally on the march to a dual invasion; v2.2 removes the old rule that switched Shatter off exactly then.)
+- Illegal only if the resulting position would leave either Warlord in check.
 - Counts as the normal move (a Rally may still follow).
 
 **Rally**
@@ -343,13 +346,21 @@ Retained from earlier versions: the midline-invasion / stalemate-loss engine (th
 - **The Shade bug (above) was caught by the engine, not by review** — the strongest argument for simulating before shipping.
 - **AI-sensitivity caveat.** When the AI's Twins were denied their tempo-Rally (an optimization), Twins fell to last (~10%); restoring Rally lifted them to ~60%. The roster's balance is genuinely skill-dependent, so all standings above are provisional.
 
-**Tuning knobs, now data-informed.** (a) **Accord is the one genuine open question.** Against a field that defends its king well (formation-aware AI + castling), Accord went **0-8-2** — its worst showing, and now hard to dismiss as noise. But it is doubly confounded: a greedy bot pilots the subtle positional phalanx worse than any other army, *and* the king-safety eval that makes the AI "better" also makes every opponent turtle — precisely what counters a slow break-through army. So Accord is either the genuinely weakest army or the one most punished by defense-leaning play, and a bot can't separate those. Crucially, **empowerment buffs were proven not to help** (five regimes, ~100 games, all ≈40–50% or worse), so the lever everyone reaches for is a dead end. **No Accord rule changed.** This is the **#1 item for human playtest**: does well-played Accord convert against competent defense? If it truly can't, the fix is a way to *break* a king-safe wall (e.g. making empowered pieces harder to blockade), not more empowerment. (b) **Crown was never weak — its castling was missing from the engine, not the rules.** The early ~30% reading came from an engine that never implemented castling (Crown's defining king-safety mechanic, and per Sirlin the *only* army that castles). Once castling was implemented and the AI valued king safety, Crown rose to the **top of the field (~75%)**. No buff is needed or wanted; the earlier "grow Royal Abundance" suggestion is retracted. If anything Crown's strength validates the power budget — it is standard chess plus the one king-safety tool no other army gets, so the gimmick armies' concessions are real. (c) **Phantom** led under weak defense on the piercing Shade but normalized to ~50% once opponents defended their kings and Crown castled. (d) **Veil/Twins/Wild** land mid-to-upper; Twins' fair number is ~45% (its lower readings came from AI Rally-pruning, not the design).
+**Tuning knobs, now data-informed.** (a) **Accord is the one genuine open question.** Against a field that defends its king well (formation-aware AI + castling), Accord went **0-8-2** — its worst showing, and now hard to dismiss as noise. But it is doubly confounded: a greedy bot pilots the subtle positional phalanx worse than any other army, *and* the king-safety eval that makes the AI "better" also makes every opponent turtle — precisely what counters a slow break-through army. So Accord is either the genuinely weakest army or the one most punished by defense-leaning play, and a bot can't separate those. Crucially, **empowerment buffs were proven not to help** (five regimes, ~100 games, all ≈40–50% or worse), so the lever everyone reaches for is a dead end. **No Accord rule changed.** This is the **#1 item for human playtest**: does well-played Accord convert against competent defense? If it truly can't, the fix is a way to *break* a king-safe wall (e.g. making empowered pieces harder to blockade), not more empowerment. **v2.2 ships exactly this fix** — Phalanx Empowerment lets the formation strike through its own pieces. (b) **Crown was never weak — its castling was missing from the engine, not the rules.** The early ~30% reading came from an engine that never implemented castling (Crown's defining king-safety mechanic, and per Sirlin the *only* army that castles). Once castling was implemented and the AI valued king safety, Crown rose to the **top of the field (~75%)**. No buff is needed or wanted; the earlier "grow Royal Abundance" suggestion is retracted. If anything Crown's strength validates the power budget — it is standard chess plus the one king-safety tool no other army gets, so the gimmick armies' concessions are real. (c) **Phantom** led under weak defense on the piercing Shade but normalized to ~50% once opponents defended their kings and Crown castled. (d) **Veil/Twins/Wild** land mid-to-upper; Twins' fair number is ~45% (its lower readings came from AI Rally-pruning, not the design).
 
 **Methodology caveat (load-bearing).** These reads come from a shallow AI over small samples. The single clearest lesson of the balance testing: a 10-games-per-variant result ("Queen-empowerment helps, +10%") *reversed* when the sample was doubled. None of the standings above are significant at this scale — they are direction-finding for a future large-sample pass, not verdicts.
 
 -----
 
 ## Changelog
+
+### v2.2 — Balance Pass: Fun First
+
+A pass over all six armies with one instruction: err toward fun. Two rules changed; four armies reviewed and deliberately left alone.
+
+- **Accord — Phalanx Empowerment (replaces the king-step).** The bonus king-step was the least exciting rule in the game and a hundred simulated games showed no strength-tuning of it rescued the army. Empowerment is now *the phalanx parts*: inside the Banner, Rooks and Bishops slide **through friendly pieces**, and Knights become **Nightriders** (the leap repeats in a straight line, riding over friendlies). This is simultaneously the fun fix and the strategic fix the Design Notes called for — a way to **break a king-safe wall**: a turtled defense can't blockade an army that shoots through itself. Still zero bookkeeping: one glance at the 3×3 answers everything. Legacy `king-step`/`queen` modes remain as engine experiment knobs.
+- **Twins — Shatter spares royals.** Shatter is the Twins' most fun button, and the old "illegal if the other Warlord is adjacent" clause switched it off precisely when Warlords pair up for the dual-invasion march. The blast now passes over Warlords (and Kings — though an enemy royal can never legally stand adjacent anyway), so paired Warlords can still detonate. Everything else about Shatter is unchanged.
+- **Reviewed, unchanged:** Crown (the benchmark; its strength *is* the power budget's yardstick), Phantom (just received Ghostwalk in v2.1 — let it breathe), Veil and Wild (mid-table, already the two most mechanically flavorful armies).
 
 ### v2.1.1 — Homing Tightened, Shade-Answer Clarified
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 — 2026-07-06
+
+**v1.1.0 — Balance pass, fun first (rules v2.2)**
+
+All six armies reviewed with one instruction: err toward fun. Two changed.
+
+### Accord — Phalanx Empowerment (replaces the king-step)
+- The bonus king-step was the game's least exciting rule, and ~100 simulated games showed no strength-tuning of it rescued the army. Empowerment is now *the phalanx parts*: inside the Banner, **Rooks and Bishops slide through friendly pieces** (enemies still block; no landing on friendlies) and **Knights become Nightriders** (the leap repeats in a straight line, riding over friendly stepping stones, capturing the first enemy landing square). Threat mirrors movement — a Banner rook checks straight through its own pawn wall, which is exactly the "break a king-safe wall" fix the design notes prescribed.
+- Engine: `phalanxSlideTargets` / `phalanxKnightTargets` + mirrored attack functions in `src/engine/accord.ts`; phalanx mode **replaces** the native move set (it's a superset) rather than unioning a bonus. `ACCORD_EMPOWERMENT` default is now `'phalanx'`; legacy `'king-step'`/`'queen'` modes remain as experiment knobs via `setAccordEmpowerment`.
+
+### Twins — Shatter spares royals
+- The "illegal if the other Warlord is adjacent" clause switched off the Twins' most fun button exactly when Warlords pair up for the dual-invasion march. Shatter now destroys everything adjacent **except K-slot pieces** — the blast passes over the partner Warlord (an enemy royal can never legally stand adjacent anyway). Royal-sparing applied in `twins.ts` (`applyShatterToBoard`), `apply.ts`, and the UI (`extractCaptures`, `ShatterPreview`).
+
+### Reviewed, unchanged
+- Crown (the benchmark — its strength is the power budget's yardstick), Phantom (Ghostwalk just landed in v2.1), Veil and Wild (mid-table and already the most mechanically flavorful).
+
+### UI
+- Accord and Twins strings updated across the hint bar, army info sheet, piece move-reminders, and Shatter preview (royals no longer listed as victims); dropped the now-obsolete "Shatter unavailable — Warlords adjacent" hint.
+
 ## 1.0.1 — 2026-07-06
 
 **v1.0.1 — Rules-fidelity bug fixes (rules v2.1.1)**
