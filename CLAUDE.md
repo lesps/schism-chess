@@ -19,7 +19,7 @@ src/pbm/       # Pure TS — play-by-post logic (S10: types, codec, game flow, v
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
-docs/          # RULES.md (canonical ruleset, v2.0.1); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
+docs/          # RULES.md (canonical ruleset, v2.0.2); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
 ```
 
 ## Engine Purity Rule
@@ -228,9 +228,9 @@ Registered as both generator and ThreatModel for army `'Phantom'`.
 
 **Shade** (Q-slot): slides like a Queen, cannot capture, attacks all Queen-line squares for threat purposes. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`).
 
-**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to unoccupied square that reduces Chebyshev distance to enemy king). No en passant given or received. Promote to standard FIDE pieces.
+**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to an unoccupied square that steps genuinely toward the enemy king: Chebyshev distance strictly decreases AND neither axis distance increases). No en passant given or received. Promote to standard FIDE pieces.
 
-`THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if it reduces distance to at least one Warlord.
+`THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if the step homes toward at least one Warlord.
 
 ## Accord army (`src/engine/accord.ts`)
 

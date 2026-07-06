@@ -67,6 +67,26 @@ function addWispMoves(state: GameState, sq: Square, _color: Color, turns: Turn[]
   }
 }
 
+// Promoted FIDE Queen: standard 8-direction slides with captures.
+// No Wraith abilities: no teleport, no Essence cost, checks normally at any Essence.
+function addQueenSlideMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
+  const board = state.board;
+  const rank = sq >> 3, file = sq & 7;
+  for (const [dr, df] of ALL_DIRS) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      const tp = board[target];
+      if (tp) {
+        if (tp.color !== color) pushStandard(turns, sq, target);
+        break;
+      }
+      pushStandard(turns, sq, target);
+      r += dr; f += df;
+    }
+  }
+}
+
 // Promoted FIDE Rook: standard orthogonal slides with captures.
 function addRookSlideMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
   const board = state.board;
@@ -180,7 +200,13 @@ function veilGenerator(state: GameState): Turn[] {
 
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
-      case 'Q': addWraithMoves(state, sq, color, turns); break;
+      case 'Q':
+        if (piece.promoted) {
+          addQueenSlideMoves(state, sq, color, turns);
+        } else {
+          addWraithMoves(state, sq, color, turns);
+        }
+        break;
       case 'R':
         if (piece.promoted) {
           addRookSlideMoves(state, sq, color, turns);
@@ -213,8 +239,9 @@ function veilAttackedSquares(state: GameState, byColor: Color): Set<Square> {
 
     switch (piece.slot) {
       case 'Q': {
-        // Wraith attacks Queen-LOS only at ≥1 Essence; inert at 0
-        if (essence >= 1) {
+        // Promoted FIDE Queen attacks Queen-LOS unconditionally (no Essence gating);
+        // the Wraith attacks Queen-LOS only at ≥1 Essence — inert at 0.
+        if (piece.promoted || essence >= 1) {
           for (const [dr, df] of ALL_DIRS) {
             let r = rank + dr, f = file + df;
             while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
