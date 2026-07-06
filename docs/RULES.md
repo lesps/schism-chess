@@ -1,4 +1,4 @@
-# Schism Chess — Rules v2.0.1
+# Schism Chess — Rules v2.1
 
 A chess variant inspired by David Sirlin's Chess 2: The Sequel. Six asymmetric armies, a midline invasion win condition, and no hidden information.
 
@@ -76,7 +76,7 @@ Quick identities and primary win lanes:
 |Army   |Signature                                                   |Primary win lane                   |
 |-------|------------------------------------------------------------|-----------------------------------|
 |Crown  |Highest raw material; only army that castles & over-promotes|Checkmate / flexible               |
-|Phantom|Shade gives **piercing** check; homing Thralls              |Zugzwang nets, checkmate           |
+|Phantom|**Ghostwalking** Shade gives **piercing** check; homing Thralls|Zugzwang nets, checkmate           |
 |Accord |Herald **Banner** empowers a clustered phalanx              |Positional control, escort invasion|
 |Twins  |Two royal Warlords; Rally action economy; Shatter           |Invasion + tactical tempo          |
 |Veil   |Essence-gated teleporting Wraith that can now **check**     |Surgical checkmate + invasion      |
@@ -111,9 +111,10 @@ Quick identities and primary win lanes:
 
 **Shade**
 
-- Moves as a Queen (orthogonal/diagonal, any distance, blocked by pieces like a Queen).
+- Moves along Queen lines (orthogonal/diagonal, any distance).
+- **Ghostwalk (new in v2.1).** The Shade's *movement* passes **through occupied squares** — friendly and enemy pieces alike — as if they weren't there. It may only **land on an empty square**. Ghostwalk affects movement only: the Shade's threat (check) still requires a clear line of sight, exactly as below.
 - **Cannot capture.**
-- **Can be captured normally** by any enemy piece (Counterplay Principle).
+- **Can be captured normally** by any enemy piece (Counterplay Principle) — but good luck cornering it.
 - **Piercing check.** The Shade gives check like a Queen **and requires a clear line of sight** — intervening pieces block it, so the Shade gives **no check through a wall** (in particular, no check exists at game start, when files and diagonals are blocked by pawns). Once the Shade *does* check, that check **may not be answered by interposing a piece**: the only legal responses are to **move the king** or to **capture the Shade.** The Shade can give checkmate.
 
 > **v2.0.1 fix.** v2.0 described this as an "unblockable check." Simulation showed that reading was incoherent and game-breaking: interpreted as checking *through* blockers, the Shade put an opponent's royal in checkmate on move 0 along its starting file (it forced an immediate loss in Phantom-vs-Twins). The piercing-check definition above — line-of-sight to *give* the check, no interposition to *answer* it — is the coherent, balanced version and is what v2.0.1 ships.
@@ -124,7 +125,7 @@ Quick identities and primary win lanes:
 - **Homing Move:** instead of moving forward, a Thrall may move one square in *any* direction to an unoccupied square, provided it reduces the Chebyshev distance to the enemy king.
 - No en passant (given or received). Count as pawns for promotion and all other purposes.
 
-**Identity:** The Shade is a zoning and mating engine, not a fighter — it removes the "interpose" escape from check, so it drives the enemy king and sets up the homing-Thrall net for zugzwang or invasion-blocking. Its weakness is real: the Shade adds **zero** capturing material, and now that it can be captured, a determined opponent can spend a piece to end the harassment. The Phantom is the lightest army on raw material and must convert pressure into a mate or a stalemate-loss.
+**Identity:** The Shade is a zoning and mating engine, not a fighter — it removes the "interpose" escape from check, so it drives the enemy king and sets up the homing-Thrall net for zugzwang or invasion-blocking. Ghostwalk makes it feel like the specter it is: walls, pawn chains, and crowds mean nothing to its movement, so it repositions instantly and is maddening to pin down — hunting it costs real tempo. Its weakness is still real: the Shade adds **zero** capturing material, and a determined opponent who does corner it can spend a piece to end the harassment. The Phantom is the lightest army on raw material and must convert pressure into a mate or a stalemate-loss.
 
 -----
 
@@ -318,7 +319,7 @@ v2.0 rebuilds the game on four principles.
 |Army   |Queen slot                 |Rook slots      |Bishop/Knight         |Net read                                    |Concession that pays for the upside    |
 |-------|---------------------------|----------------|----------------------|--------------------------------------------|---------------------------------------|
 |Crown  |Queen (9)                  |10              |12                    |~39, **highest floor**                      |No gimmick; must out-play              |
-|Phantom|Shade (~6, can't capture)  |10              |12                    |slightly **under**, buoyed by homing Thralls|Zero capturing material from the Q-slot|
+|Phantom|Shade (~7, Ghostwalk, can't capture)|10              |12                    |slightly **under**, buoyed by homing Thralls|Zero capturing material from the Q-slot|
 |Accord |Herald (~2)                |10              |12                    |**swings** low→high with the Banner         |Collapses if the Herald dies           |
 |Twins  |2 Warlords (royal fighters)|10              |12                    |~on-budget after the fork fix               |Two royal targets; no Queen            |
 |Veil   |Wraith (~8, Essence-gated) |Wisps (~4 total)|12                    |~on-budget                                  |Weak rooks; inert at 0 Essence         |
@@ -349,6 +350,12 @@ Retained from earlier versions: the midline-invasion / stalemate-loss engine (th
 -----
 
 ## Changelog
+
+### v2.1 — Phantom Buff: Ghostwalk
+
+- **Shade gains Ghostwalk:** its movement passes through occupied squares (friendly and enemy), landing only on empty ones. Threat is unchanged — check still requires clear line of sight, and the piercing-check response rule is untouched.
+- **Rationale.** With the v2.0 Counterplay Principle, the Shade became capturable — correct for the game's health, but it left the Phantom feeling weak and flat next to its inspiration (Chess 2's protected Nemesis): a piece that can't capture *and* dies to any attacker was too easy to neutralize. Rather than reintroduce uncapturability (forbidden by the Counterplay Principle), Ghostwalk makes the Shade survivable the Schism way — **by condition, not immunity**: it is hard to corner because terrain never traps it, yet any piece that catches it still kills it. Zero new bookkeeping: legality is read straight off the board.
+- Simulation/balance note: Phantom sat slightly under budget (lightest raw material in the roster); Ghostwalk raises the Shade's effective value from ~6 to ~7 without adding capturing material, keeping the army's identity (pressure, zugzwang, mate nets) intact.
 
 ### v2.0.1 — Shade Fix, Castling, and Simulation Passes
 

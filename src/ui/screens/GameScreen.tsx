@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { Army, Color, RampageMove, Square, Turn } from '../../engine/types';
 import { applyTurnUnchecked } from '../../engine';
 import { bannerZone } from '../../engine/accord';
+import { ArmyInfoSheet } from '../components/ArmyInfoSheet';
 import { Board } from '../components/Board';
 import type { OverlayKind } from '../components/Board';
 import { CapturedPieceTray } from '../components/CapturedPieceTray';
@@ -20,7 +21,6 @@ import {
   PIECE_COLORS,
   armorZone,
   getPieceInfo,
-  getPrimaryFrom,
   getSlotName,
   hasCrossedMidline,
   primaryEq,
@@ -77,6 +77,9 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   // ── Rampage preview ──
   const [rampagePreviewTurn, setRampagePreviewTurn] = useState<(Turn & { primary: RampageMove }) | null>(null);
 
+  // ── Army info sheet ──
+  const [armyInfoOpen, setArmyInfoOpen] = useState(false);
+
   // ── Board orientation ──
   const [autoFlip, setAutoFlip] = useState(true);
   const [locked, setLocked] = useState(false);
@@ -129,15 +132,17 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     return map;
   }, [twinsStagingTurns]);
 
-  // Wild: Armor zone around selected Behemoth
+  // Wild: Armor zone around any selected Behemoth (either color — inspecting
+  // the enemy's Behemoth shows where you must attack it from)
   const armorSquares = useMemo((): Map<Square, OverlayKind> => {
-    if (movingArmy !== 'Wild' || selectedSquare === null) return new Map();
+    if (selectedSquare === null) return new Map();
     const piece = gameState.board[selectedSquare];
-    if (!piece || piece.slot !== 'R') return new Map();
+    if (!piece || piece.slot !== 'R' || piece.promoted) return new Map();
+    if (armies[piece.color] !== 'Wild') return new Map();
     const map = new Map<Square, OverlayKind>();
     for (const sq of armorZone(selectedSquare)) map.set(sq, 'armor');
     return map;
-  }, [movingArmy, selectedSquare, gameState.board]);
+  }, [selectedSquare, gameState.board, armies]);
 
   // Shatter: Blast zone around shatterPreviewSq (shown in overlay, also colored on board)
   const blastSquares = useMemo((): Map<Square, OverlayKind> => {
@@ -199,11 +204,9 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
       if (movingArmy === 'Twins' && checkedSquares.length >= 2) return HINTS.TWINS_BOTH_IN_CHECK;
       if (opponentArmy === 'Phantom') return HINTS.PIERCING_CHECK;
     }
-    if (movingArmy === 'Wild' && selectedSquare !== null) {
-      if (exhaustedSquares.has(selectedSquare)) {
-        const piece = gameState.board[selectedSquare];
-        if (piece?.slot === 'B') return HINTS.STALKER_EXHAUSTED;
-      }
+    if (selectedSquare !== null && exhaustedSquares.has(selectedSquare)) {
+      const piece = gameState.board[selectedSquare];
+      if (piece?.slot === 'B' && armies[piece.color] === 'Wild') return HINTS.STALKER_EXHAUSTED;
     }
     if (
       history.length === 0 &&
@@ -211,7 +214,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
       (myColor === undefined || sideToMove === myColor)
     ) return HINTS.FIRST_MOVE;
     return null;
-  }, [twinsStagingTurns, checkedSquares, movingArmy, opponentArmy, selectedSquare, exhaustedSquares, gameState.board, history.length, myColor, sideToMove]);
+  }, [twinsStagingTurns, checkedSquares, movingArmy, opponentArmy, selectedSquare, exhaustedSquares, gameState.board, history.length, myColor, sideToMove, armies]);
 
   // ── Selected-piece reminder ──
   const selectedPiece = selectedSquare !== null ? gameState.board[selectedSquare] : null;
@@ -227,10 +230,11 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   }, [movingArmy, selectedSquare, allLegal, gameState.board]);
 
   // ── Click handler ──
+  // Whether the local player may act (always true in hotseat; PBM gates on color).
+  const canAct = myColor === undefined || gameState.sideToMove === myColor;
+
   function handleSquareClick(sq: Square) {
     if (status.type !== 'ongoing') return;
-    // PBM mode: block input when it's not our turn
-    if (myColor !== undefined && gameState.sideToMove !== myColor) return;
 
     // ── Rally phase (Twins staging) ──
     if (twinsStagingTurns !== null) {
@@ -248,7 +252,9 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     }
 
     if (selectedSquare !== null) {
-      const destTurns = turnsForMove(allLegal, selectedSquare, sq);
+      // Move submission is only available to the acting player; inspection
+      // (selecting pieces to read their info) is always available.
+      const destTurns = canAct ? turnsForMove(allLegal, selectedSquare, sq) : [];
 
       if (destTurns.length > 0) {
         const first = destTurns[0];
@@ -302,26 +308,21 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         return;
       }
 
-      // Not a valid destination — try re-selecting
-      const piece = gameState.board[sq];
-      if (piece && piece.color === sideToMove) {
-        const hasMoves = allLegal.some(t => getPrimaryFrom(t) === sq);
-        if (hasMoves) {
-          setSelectedSquare(sq);
-          return;
-        }
+      // Not a valid destination — toggle off, or inspect another piece.
+      // Any piece (either color, with or without legal moves) can be selected
+      // so its info bar is shown; only pieces with moves get destination dots.
+      if (sq === selectedSquare) {
+        setSelectedSquare(null);
+        return;
       }
-
-      setSelectedSquare(null);
+      const piece = gameState.board[sq];
+      setSelectedSquare(piece ? sq : null);
       return;
     }
 
-    // No piece selected — try to select one
+    // No piece selected — tap any piece to select/inspect it
     const piece = gameState.board[sq];
-    if (piece && piece.color === sideToMove) {
-      const hasMoves = allLegal.some(t => getPrimaryFrom(t) === sq);
-      if (hasMoves) setSelectedSquare(sq);
-    }
+    if (piece) setSelectedSquare(sq);
   }
 
   function handleFlipToggle() {
@@ -374,6 +375,15 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         >
           {flipLabel}
         </button>
+        <button
+          className="flip-btn"
+          onClick={() => setArmyInfoOpen(true)}
+          aria-label="About these armies"
+          title="About these armies"
+          data-testid="army-info-btn"
+        >
+          ⓘ
+        </button>
         {onRules && (
           <button
             className="flip-btn"
@@ -390,10 +400,13 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
       {/* Hint bar */}
       <HintBar message={hint} />
 
-      {/* Selected-piece reminder */}
+      {/* Selected-piece reminder (shown for any tapped piece, even without moves) */}
       {selectedPiece && twinsStagingTurns === null && (() => {
         const pArmy = armies[selectedPiece.color];
         const promoted = selectedPiece.promoted ?? false;
+        const note = selectedPiece.color !== sideToMove
+          ? HINTS.INSPECT_WAITING
+          : (legalMovesForSelected.length === 0 ? HINTS.NO_LEGAL_MOVES : null);
         return (
           <div className="piece-info-bar" data-testid="piece-info">
             <span
@@ -407,6 +420,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
               <strong className="piece-info-name" style={{ color: ARMY_ACCENTS[pArmy] }}>
                 {getSlotName(selectedPiece.slot, pArmy, promoted)}
                 {promoted ? ' (promoted)' : ''}
+                {note && <span className="piece-info-note"> · {note}</span>}
               </strong>
               <span className="piece-info-desc">
                 {getPieceInfo(selectedPiece.slot, pArmy, promoted)}
@@ -542,6 +556,15 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
             setChooserTurns(null);
           }}
           onCancel={() => setChooserTurns(null)}
+        />
+      )}
+
+      {/* Army info sheet */}
+      {armyInfoOpen && (
+        <ArmyInfoSheet
+          armies={armies}
+          onRules={onRules ? anchor => { setArmyInfoOpen(false); onRules(anchor); } : undefined}
+          onClose={() => setArmyInfoOpen(false)}
         />
       )}
 

@@ -53,6 +53,22 @@ function addSlidingMoves(
   }
 }
 
+// Ghostwalk (v2.1): the Shade drifts along Queen lines THROUGH occupied
+// squares — friendly and enemy alike — landing only on empty ones. It still
+// cannot capture, and its check still requires clear line of sight
+// (Ghostwalk changes movement, not threat).
+function addGhostwalkMoves(board: GameState['board'], sq: Square, turns: Turn[]): void {
+  const rank = sq >> 3, file = sq & 7;
+  for (const [dr, df] of ALL_DIRS) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      if (!board[target]) pushMove(turns, sq, target);
+      r += dr; f += df;
+    }
+  }
+}
+
 function addKnightMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
   const rank = sq >> 3, file = sq & 7;
   for (const [dr, df] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]] as const) {
@@ -160,8 +176,13 @@ function phantomGenerator(state: GameState): Turn[] {
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
       case 'Q':
-        // Promoted FIDE Queen captures normally; Shade cannot capture
-        addSlidingMoves(board, sq, color, ALL_DIRS, !!piece.promoted, turns);
+        if (piece.promoted) {
+          // Promoted FIDE Queen: normal sliding, captures normally
+          addSlidingMoves(board, sq, color, ALL_DIRS, true, turns);
+        } else {
+          // Shade: Ghostwalks through pieces, never captures
+          addGhostwalkMoves(board, sq, turns);
+        }
         break;
       case 'R': addSlidingMoves(board, sq, color, ORTHO, true, turns); break;
       case 'B': addSlidingMoves(board, sq, color, DIAGS, true, turns); break;

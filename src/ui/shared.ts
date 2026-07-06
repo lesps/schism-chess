@@ -13,11 +13,31 @@ export const ARMY_NAMES: Record<Army, string> = {
 
 export const ARMY_TAGLINES: Record<Army, string> = {
   Crown:   'Highest raw material; castles; flexible',
-  Phantom: 'Shade gives piercing check; homing Thralls',
+  Phantom: 'Ghostwalking Shade; piercing check; homing Thralls',
   Accord:  'Herald Banner empowers your phalanx',
   Twins:   'Two royals; Rally action; Shatter',
   Veil:    'Essence-gated teleporting Wraith',
   Wild:    'Chancellor, siege engine, ambush predator',
+};
+
+// Two-to-three sentence identity summaries, distilled from docs/RULES.md.
+// Shown in the in-game army info sheet.
+export const ARMY_IDENTITIES: Record<Army, string> = {
+  Crown:   'The benchmark army: standard chess. It owns the only true Queen, the only castling, and can always re-promote to Queen. No tricks — it wins by conventional pressure and is never structurally lost.',
+  Phantom: 'A relentless hunter. The Shade never captures but Ghostwalks through pieces and gives piercing check — blocking is impossible, so the enemy King must run or someone must hunt the Shade down. Homing Thralls creep toward the enemy King to close the net.',
+  Accord:  'A phalanx built around its standard-bearer. Friendly Knights, Bishops, and Rooks inside the Herald’s 3×3 Banner gain a bonus king-step for everything they do. Devastating while the formation holds — and it collapses the moment the Herald falls.',
+  Twins:   'Two royal Warlords and the best action economy in the game: move, then optionally Rally one Warlord a free step. Shatter annihilates everything around a Warlord. Both must cross the midline to invade — and both must be kept safe.',
+  Veil:    'A resource-gated assassin. The Wraith moves as a Queen or teleports anywhere, paying 1 Essence per capture — at 0 Essence it goes inert. Feed it by capturing enemy pawns with your minor pieces; its Wisps teleport to block and obstruct.',
+  Wild:    'Unorthodox aggression at short range: the Apex leaps like a rook-knight, armored Behemoths rampage through whole files, Stalkers strike and slip back home, and Broncos trample even their own. Slow to develop, brutal up close.',
+};
+
+export const ARMY_RULE_ANCHORS: Record<Army, string> = {
+  Crown:   '1-the-crown',
+  Phantom: '2-the-phantom',
+  Accord:  '3-the-accord',
+  Twins:   '4-the-twins',
+  Veil:    '5-the-veil',
+  Wild:    '6-the-wild',
 };
 
 export const ARMIES: Army[] = ['Crown', 'Phantom', 'Accord', 'Twins', 'Veil', 'Wild'];
@@ -79,7 +99,7 @@ const ARMY_PIECE_INFO: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
     P: 'Forward one (two from start); captures diagonally; en passant; promotes on the last rank.',
   },
   Phantom: {
-    Q: 'Slides like a Queen but never captures. Its check pierces — blocking is impossible; move the King or take the Shade.',
+    Q: 'Ghostwalks along Queen lines — drifts through pieces, landing only on empty squares. Never captures. Its check pierces: blocking is impossible; move the King or take the Shade.',
     P: 'Forward one (no double step); captures diagonally; or homes one step toward the enemy King. Promotes.',
   },
   Accord: {
