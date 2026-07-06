@@ -115,3 +115,37 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 **Code:** `legality.ts` applies both `checkResponseConstraint` (Phantom's piercing rule) and the Twins one-action-per-check filter in the same pipeline pass. The shade-check-vs-Twins test is in `tests/engine/twins.test.ts`.
 
 **Test:** `it('shade-check vs Twins: piercing check constraint composes with single-check rule')` — verifies that with a Shade on e8 giving check to a Warlord on e4, only king-moves and Shade-capture moves survive as legal primaries; interposition (Rook to e5) and unrelated Warlord moves (a1 Warlord) are both vetoed.
+
+---
+
+## Post-1.0 Fix Pass (v1.0.1)
+
+### Thrall homing requires per-axis approach, not just Chebyshev reduction
+
+**Ruling:** A homing step is legal only if it moves the Thrall genuinely toward an enemy king: the Chebyshev distance must strictly decrease **and** neither the rank distance nor the file distance may increase. Against Twins, the step must satisfy this for at least one Warlord (`THRALL_HOMING_TWINS = 'either'` unchanged).
+
+**Code:** `stepHomesTowardKing` in `src/engine/phantom.ts`.
+
+**Rationale:** Bare Chebyshev reduction was too loose. Whenever one axis dominated the distance, a step drifting away on the other axis still reduced the max — so a Thrall with the enemy king straight ahead could sidestep to either forward diagonal, and one with the king due east could step diagonally *backward*. Against two spread Warlords, all four diagonals could qualify simultaneously, which read as "Thralls move any direction they like." The per-axis condition restores the intended homing feel: every step visibly closes on a king.
+
+### Shade check may be answered by any capture mechanism
+
+**Ruling:** "Capture the Shade" as a piercing-check response includes teleport-captures (Veil Wraith), Strikes (Wild Stalker), and rampages (Wild Behemoth) — not just standard captures and Shatter.
+
+**Code:** `checkResponseConstraint` in `src/engine/phantom.ts` now approves `teleport` (capture onto the Shade's square), `strike` (target = Shade), and `rampage` (captures include the Shade). Previously all three were vetoed unconditionally, making some Shade checks artificially unanswerable for Veil and Wild.
+
+### Promoted Veil Queen is a plain FIDE Queen
+
+**Ruling:** A pawn promoted into the Veil's Q-slot (possible only after the Wraith is gone) is a standard FIDE Queen: it slides and captures normally, never teleports, pays no Essence, gains none, and gives check regardless of the Essence pool.
+
+**Code:** `veilGenerator` and `veilAttackedSquares` dispatch on `piece.promoted` for the Q-slot (mirroring the existing Phantom/Accord/Wild promoted-Q handling); `applyTurnUnchecked` guards the Wraith Essence spend with `!piece.promoted`.
+
+**Rationale:** RULES.md §Promotion: "A promoted piece is always a standard FIDE piece with no army abilities." The Veil was the one army missing the promoted-Q dispatch, so a promoted Queen inherited the Wraith's teleport and Essence gating (including draining Essence below zero on captures).
+
+### Essence gain limited to Bishop/Knight/Pawn capturers
+
+**Ruling:** Only a Veil **Bishop, Knight, or Pawn** capturing an enemy pawn generates +1 Essence. A King capture or a promoted Rook capture of a pawn generates nothing. Promoted Bishops/Knights still qualify — the gain keys off the slot, since Essence is an army resource rule rather than a per-piece ability.
+
+**Code:** the gain branch in `applyTurnUnchecked` (`src/engine/apply.ts`) requires `piece.slot ∈ {B, N, P}`.
+
+**Rationale:** RULES.md enumerates the gain sources exactly: "+1 whenever a non-Wraith Veil piece (Bishop, Knight, or Pawn) captures an enemy pawn." The previous code granted the gain to any non-Wraith capturer, including the King.

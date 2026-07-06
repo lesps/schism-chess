@@ -310,27 +310,69 @@ describe('Thrall moves', () => {
     expect(hasMove(turns, 'd4', 'd6')).toBe(false); // can't skip
   });
 
-  it('homing move reduces Chebyshev distance', () => {
-    // White Thrall on a4, Black King on e4 (same rank, distance = 4).
-    // Homing to b4 reduces distance to 3 (Chebyshev max(|4-4|,|1-4|)=3). Legal.
-    // Homing to a5: distance from a5 to e4 = max(1,4) = 4. Not reduced. Illegal.
-    // Homing to a3: distance from a3 to e4 = max(1,4) = 4. Not reduced. Illegal.
-    // Homing to b3: distance from b3 to e4 = max(1,3) = 3. Reduced. Legal.
-    // Homing to b5: distance from b5 to e4 = max(1,3) = 3. Reduced. Legal.
-    // Note: forward for White is +rank (up the board). Forward from a4 is a5 (already generated as push).
+  it('homing move steps toward the enemy king (no off-axis drift)', () => {
+    // White Thrall on a4, Black King on e4 (same rank, due east, Chebyshev = 4).
+    // A homing step must strictly reduce the Chebyshev distance AND not
+    // increase the distance on either axis.
+    // b4: rank dist 0→0, file dist 4→3, Chebyshev 4→3. Legal.
+    // b3/b5: Chebyshev also drops to 3, but the rank distance grows 0→1 —
+    //   the Thrall drifts off the king's rank, so these are NOT homing. Illegal.
+    // a5: forward push (always available); as homing it wouldn't qualify (Chebyshev stays 4).
+    // a3: Chebyshev stays 4. Illegal.
     // White King needs to be somewhere safe.
     const state = parseSfen('8/8/8/8/P3k3/8/8/7K/w/Phantom,Crown/-/-/0,0/-/0/5');
     const turns = legalTurns(state);
-    // b4 reduces distance (4→3)
+    // b4 heads straight at the king (4→3)
     expect(hasMove(turns, 'a4', 'b4')).toBe(true);
-    // b3 reduces distance (4→3)
-    expect(hasMove(turns, 'a4', 'b3')).toBe(true);
-    // b5 reduces distance (4→3)
-    expect(hasMove(turns, 'a4', 'b5')).toBe(true);
+    // b3 drifts off-axis (rank distance 0→1) → not homing
+    expect(hasMove(turns, 'a4', 'b3')).toBe(false);
+    // b5 drifts off-axis (rank distance 0→1) → not homing
+    expect(hasMove(turns, 'a4', 'b5')).toBe(false);
     // a5 IS generated as a normal forward push (Thrall can push forward); it's not a homing move.
     expect(hasMove(turns, 'a4', 'a5')).toBe(true);
     // a3 does NOT reduce distance (max(1,4)=4, same as current 4) → no homing move
     expect(hasMove(turns, 'a4', 'a3')).toBe(false);
+  });
+
+  it('no diagonal homing when the enemy king is straight ahead', () => {
+    // White Thrall on e4, Black King on e8 (same file, Chebyshev = 4).
+    // d5/f5 reduce Chebyshev (4→3) but increase the file distance 0→1 —
+    // they sidestep rather than approach, so they are not homing moves.
+    // e5 is the plain forward push. No homing move exists here at all.
+    const state = parseSfen('4k3/8/8/8/4P3/8/8/K7/w/Phantom,Crown/-/-/0,0/-/0/5');
+    const turns = legalTurns(state);
+    expect(hasMove(turns, 'e4', 'e5')).toBe(true);  // forward push
+    expect(hasMove(turns, 'e4', 'd5')).toBe(false); // off-axis sidestep
+    expect(hasMove(turns, 'e4', 'f5')).toBe(false); // off-axis sidestep
+    expect(hasMove(turns, 'e4', 'd3')).toBe(false); // backward diagonal
+    expect(hasMove(turns, 'e4', 'f3')).toBe(false); // backward diagonal
+    expect(hasMove(turns, 'e4', 'd4')).toBe(false); // sideways
+    expect(hasMove(turns, 'e4', 'f4')).toBe(false); // sideways
+  });
+
+  it('diagonal homing is legal when the king lies diagonally', () => {
+    // White Thrall on c3, Black King on g7 (rank dist 4, file dist 4).
+    // d4 closes on both axes (Chebyshev 4→3). Legal homing.
+    // c4 is the forward push; as homing it wouldn't qualify (file distance unchanged → Chebyshev stays 4).
+    // d3 keeps Chebyshev at 4 → illegal. b4/b2 move away on the file axis → illegal.
+    const state = parseSfen('8/6k1/8/8/8/2P5/8/K7/w/Phantom,Crown/-/-/0,0/-/0/5');
+    const turns = legalTurns(state);
+    expect(hasMove(turns, 'c3', 'd4')).toBe(true);  // toward the king on both axes
+    expect(hasMove(turns, 'c3', 'c4')).toBe(true);  // forward push
+    expect(hasMove(turns, 'c3', 'd3')).toBe(false); // Chebyshev unchanged
+    expect(hasMove(turns, 'c3', 'b4')).toBe(false); // away on the file axis
+    expect(hasMove(turns, 'c3', 'b2')).toBe(false); // away on both axes
+  });
+
+  it('backward homing is legal when the enemy king is behind', () => {
+    // White Thrall on d5, Black King on d2 (directly behind, Chebyshev = 3).
+    // d4 steps straight back toward the king (3→2). Legal homing.
+    // c4/e4 also reduce Chebyshev to 2 but drift off the king's file (0→1) → illegal.
+    const state = parseSfen('8/8/8/3P4/8/8/3k4/7K/w/Phantom,Crown/-/-/0,0/-/0/5');
+    const turns = legalTurns(state);
+    expect(hasMove(turns, 'd5', 'd4')).toBe(true);  // straight back toward the king
+    expect(hasMove(turns, 'd5', 'c4')).toBe(false); // drifts off the king's file
+    expect(hasMove(turns, 'd5', 'e4')).toBe(false); // drifts off the king's file
   });
 
   it('homing move to occupied square is illegal', () => {
@@ -433,6 +475,68 @@ describe('Cross-army captures', () => {
     const turns3 = legalTurns(state3);
     // Shade on e4 checks king on e8 (e5,e6,e7 all empty → LOS). Rook captures Shade = legal.
     expect(hasMove(turns3, 'h4', 'e4')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shade check answered by non-standard capture mechanisms
+// (teleport-capture, strike, rampage — all remove the Shade, all legal)
+// ---------------------------------------------------------------------------
+describe('Shade check vs non-standard captures', () => {
+  it('Veil Wraith may teleport-capture the checking Shade; teleport interposition stays illegal', () => {
+    // White Shade on e6 checks Black King on e8 (e7 empty → LOS).
+    // Black Wraith on b1 is NOT queen-aligned with e6, so its only way to take
+    // the Shade is a teleport-capture (Essence B=1 makes it available).
+    const state = parseSfen('4k3/8/4Q3/8/8/8/8/Kq6/b/Phantom,Veil/-/-/0,1/-/0/5');
+    const turns = legalTurns(state);
+
+    const teleCapShade = turns.some(t =>
+      t.primary.type === 'teleport' &&
+      t.primary.from === sq('b1') && t.primary.to === sq('e6') && t.primary.isCapture,
+    );
+    expect(teleCapShade).toBe(true);
+
+    // Teleporting the Wraith to e7 would physically block the Shade's LOS, but
+    // interposition is never a legal answer to a piercing check.
+    const teleInterpose = turns.some(t =>
+      t.primary.type === 'teleport' &&
+      t.primary.from === sq('b1') && t.primary.to === sq('e7'),
+    );
+    expect(teleInterpose).toBe(false);
+
+    // King moves remain legal (d8 is off the Shade's lines).
+    expect(hasMove(turns, 'e8', 'd8')).toBe(true);
+  });
+
+  it('Wild Stalker may Strike the checking Shade', () => {
+    // White Shade on e6 checks Black King on e8. Black Stalker on c4 reaches e6
+    // in two diagonal steps (d5 empty) — the Strike removes the Shade.
+    const state = parseSfen('4k3/8/4Q3/8/2b5/8/8/K7/b/Phantom,Wild/-/-/0,0/-/0/5');
+    const turns = legalTurns(state);
+
+    const strikeShade = turns.some(t =>
+      t.primary.type === 'strike' &&
+      t.primary.from === sq('c4') && t.primary.target === sq('e6'),
+    );
+    expect(strikeShade).toBe(true);
+  });
+
+  it('Wild Behemoth may rampage over the checking Shade', () => {
+    // White Shade on e6 checks Black King on e8. Black Behemoth on e3 rampages
+    // north (e4, e5 empty) and captures the Shade at maximum distance e6.
+    const state = parseSfen('4k3/8/4Q3/8/8/4r3/8/K7/b/Phantom,Wild/-/-/0,0/-/0/5');
+    const turns = legalTurns(state);
+
+    const rampageShade = turns.some(t =>
+      t.primary.type === 'rampage' &&
+      t.primary.from === sq('e3') && t.primary.to === sq('e6') &&
+      t.primary.captures.includes(sq('e6')),
+    );
+    expect(rampageShade).toBe(true);
+
+    // A quiet Behemoth step up the file neither moves the king nor removes the
+    // Shade — still vetoed.
+    expect(hasMove(turns, 'e3', 'e4')).toBe(false);
   });
 });
 

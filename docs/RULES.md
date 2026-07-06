@@ -1,4 +1,4 @@
-# Schism Chess — Rules v2.1
+# Schism Chess — Rules v2.1.1
 
 A chess variant inspired by David Sirlin's Chess 2: The Sequel. Six asymmetric armies, a midline invasion win condition, and no hidden information.
 
@@ -115,14 +115,14 @@ Quick identities and primary win lanes:
 - **Ghostwalk (new in v2.1).** The Shade's *movement* passes **through occupied squares** — friendly and enemy pieces alike — as if they weren't there. It may only **land on an empty square**. Ghostwalk affects movement only: the Shade's threat (check) still requires a clear line of sight, exactly as below.
 - **Cannot capture.**
 - **Can be captured normally** by any enemy piece (Counterplay Principle) — but good luck cornering it.
-- **Piercing check.** The Shade gives check like a Queen **and requires a clear line of sight** — intervening pieces block it, so the Shade gives **no check through a wall** (in particular, no check exists at game start, when files and diagonals are blocked by pawns). Once the Shade *does* check, that check **may not be answered by interposing a piece**: the only legal responses are to **move the king** or to **capture the Shade.** The Shade can give checkmate.
+- **Piercing check.** The Shade gives check like a Queen **and requires a clear line of sight** — intervening pieces block it, so the Shade gives **no check through a wall** (in particular, no check exists at game start, when files and diagonals are blocked by pawns). Once the Shade *does* check, that check **may not be answered by interposing a piece**: the only legal responses are to **move the king** or to **capture the Shade** (by any capture mechanism the answering army has — an ordinary capture, a Wraith teleport-capture, a Stalker Strike, a Behemoth rampage, or a Shatter that removes it). The Shade can give checkmate.
 
 > **v2.0.1 fix.** v2.0 described this as an "unblockable check." Simulation showed that reading was incoherent and game-breaking: interpreted as checking *through* blockers, the Shade put an opponent's royal in checkmate on move 0 along its starting file (it forced an immediate loss in Phantom-vs-Twins). The piercing-check definition above — line-of-sight to *give* the check, no interposition to *answer* it — is the coherent, balanced version and is what v2.0.1 ships.
 
 **Thralls**
 
 - Move one square forward (no two-square first move); capture one square diagonally forward.
-- **Homing Move:** instead of moving forward, a Thrall may move one square in *any* direction to an unoccupied square, provided it reduces the Chebyshev distance to the enemy king.
+- **Homing Move:** instead of moving forward, a Thrall may move one square in *any* direction to an unoccupied square, provided the step moves it genuinely **toward the enemy king**: the Chebyshev distance must decrease, **and neither the rank distance nor the file distance may increase**. (Chebyshev reduction alone is not enough — a step that drifts away from the king on one axis while the other axis dominates is not a homing move.)
 - No en passant (given or received). Count as pawns for promotion and all other purposes.
 
 **Identity:** The Shade is a zoning and mating engine, not a fighter — it removes the "interpose" escape from check, so it drives the enemy king and sets up the homing-Thrall net for zugzwang or invasion-blocking. Ghostwalk makes it feel like the specter it is: walls, pawn chains, and crowds mean nothing to its movement, so it repositions instantly and is maddening to pin down — hunting it costs real tempo. Its weakness is still real: the Shade adds **zero** capturing material, and a determined opponent who does corner it can spend a piece to end the harassment. The Phantom is the lightest army on raw material and must convert pressure into a mate or a stalemate-loss.
@@ -350,6 +350,11 @@ Retained from earlier versions: the midline-invasion / stalemate-loss engine (th
 -----
 
 ## Changelog
+
+### v2.1.1 — Homing Tightened, Shade-Answer Clarified
+
+- **Thrall Homing Move tightened.** The earlier wording ("reduces the Chebyshev distance") let Thralls drift sideways or even diagonally backward whenever one axis dominated the distance — and against the Twins' two spread Warlords, every diagonal could qualify. Homing now requires a step genuinely toward the king: Chebyshev distance decreases **and** neither axis distance increases. Against the Twins the step must home toward at least one Warlord.
+- **Shade check answers clarified.** "Capture the Shade" explicitly includes every capture mechanism: teleport-captures, Strikes, rampages, and Shatter — not just ordinary captures.
 
 ### v2.1 — Phantom Buff: Ghostwalk
 

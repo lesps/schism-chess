@@ -1,4 +1,4 @@
-import type { Color, GameState, Slot, Square, StandardMove, Turn } from './types';
+import type { Color, GameState, RampageMove, Slot, Square, StandardMove, StrikeMove, TeleportMove, Turn } from './types';
 import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
 import { registerGenerator, availablePromotions } from './movegen';
@@ -6,8 +6,19 @@ import { registerGenerator, availablePromotions } from './movegen';
 // Provisional ruling: homing move vs Twins is legal if it reduces distance to at least one Warlord.
 export const THRALL_HOMING_TWINS = 'either' as const;
 
-function chebyshev(a: Square, b: Square): number {
-  return Math.max(Math.abs((a >> 3) - (b >> 3)), Math.abs((a & 7) - (b & 7)));
+// A homing step must genuinely approach the king: the Chebyshev distance must
+// strictly decrease AND neither the rank distance nor the file distance may
+// increase. Chebyshev reduction alone is too loose — when one axis dominates,
+// a step that drifts away on the other axis (a sideways or even backward
+// diagonal) still reduces the max, letting Thralls wander "toward" a king they
+// are not actually approaching.
+function stepHomesTowardKing(from: Square, to: Square, king: Square): boolean {
+  const rankBefore = Math.abs((king >> 3) - (from >> 3));
+  const fileBefore = Math.abs((king & 7) - (from & 7));
+  const rankAfter = Math.abs((king >> 3) - (to >> 3));
+  const fileAfter = Math.abs((king & 7) - (to & 7));
+  if (rankAfter > rankBefore || fileAfter > fileBefore) return false;
+  return Math.max(rankAfter, fileAfter) < Math.max(rankBefore, fileBefore);
 }
 
 const ALL_DIRS = [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]] as const;
@@ -119,8 +130,9 @@ function addThrallMoves(state: GameState, sq: Square, color: Color, turns: Turn[
     // No en passant
   }
 
-  // Homing move: one square any direction, unoccupied, reduces Chebyshev to enemy king.
-  // For Twins (two Warlords): legal if reduces distance to at least one Warlord (THRALL_HOMING_TWINS = 'either').
+  // Homing move: one square any direction, unoccupied, genuinely toward the enemy king
+  // (strict Chebyshev reduction with no per-axis drift — see stepHomesTowardKing).
+  // For Twins (two Warlords): legal if it homes toward at least one Warlord (THRALL_HOMING_TWINS = 'either').
   const enemyColor: Color = color === 'W' ? 'B' : 'W';
   const enemyKings: Square[] = [];
   for (let s = 0; s < 64; s++) {
@@ -128,8 +140,6 @@ function addThrallMoves(state: GameState, sq: Square, color: Color, turns: Turn[
     if (p && p.color === enemyColor && p.slot === 'K') enemyKings.push(s);
   }
   if (enemyKings.length === 0) return;
-
-  const currentDists = enemyKings.map(k => chebyshev(sq, k));
 
   for (let dr = -1; dr <= 1; dr++) {
     for (let df = -1; df <= 1; df++) {
@@ -141,14 +151,9 @@ function addThrallMoves(state: GameState, sq: Square, color: Color, turns: Turn[
       const target = r * 8 + f;
       if (board[target]) continue; // homing requires unoccupied
 
-      const newDists = enemyKings.map(k => chebyshev(target, k));
-
-      let qualifies: boolean;
-      if (THRALL_HOMING_TWINS === 'either') {
-        qualifies = enemyKings.some((_, i) => newDists[i] < currentDists[i]);
-      } else {
-        qualifies = enemyKings.every((_, i) => newDists[i] < currentDists[i]);
-      }
+      const qualifies = THRALL_HOMING_TWINS === 'either'
+        ? enemyKings.some(k => stepHomesTowardKing(sq, target, k))
+        : enemyKings.every(k => stepHomesTowardKing(sq, target, k));
 
       if (qualifies) {
         if ((target >> 3) === promoRank) {
@@ -360,6 +365,18 @@ export const phantomThreatModel: ThreatModel = {
       const df = Math.abs((shadeSq & 7) - (warlordSq & 7));
       if (Math.max(dr, df) <= 1) return true; // Shade adjacent → Shatter removes it
       return false; // Shade not adjacent → Shatter doesn't resolve check
+    }
+
+    // Any capture that removes the Shade is a legal response, regardless of mechanism.
+    if (turn.primary.type === 'teleport') {
+      const tp = turn.primary as TeleportMove;
+      return tp.isCapture && tp.to === shadeSq; // Wraith teleport-captures the Shade
+    }
+    if (turn.primary.type === 'strike') {
+      return (turn.primary as StrikeMove).target === shadeSq; // Stalker strikes the Shade
+    }
+    if (turn.primary.type === 'rampage') {
+      return (turn.primary as RampageMove).captures.includes(shadeSq); // rampage clears the Shade
     }
 
     return false; // all other move types vetoed

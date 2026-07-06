@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1 — 2026-07-06
+
+**v1.0.1 — Rules-fidelity bug fixes (rules v2.1.1)**
+
+### Engine fixes
+- **Phantom Thrall homing tightened** (the reported bug): bare Chebyshev reduction let Thralls sidestep to both forward diagonals when the enemy king was straight ahead, step diagonally *backward* when the king was due east/west, and (vs Twins' spread Warlords) qualify in all four diagonal directions. A homing step now must move genuinely toward a king: Chebyshev distance strictly decreases **and** neither the rank nor file distance increases (`stepHomesTowardKing` in `src/engine/phantom.ts`). `THRALL_HOMING_TWINS = 'either'` semantics unchanged.
+- **Shade piercing check answerable by any capture mechanism**: `checkResponseConstraint` wrongly vetoed a Veil Wraith teleport-capture of the Shade, a Wild Stalker Strike on it, and a Behemoth rampage over it — all legal "capture the Shade" responses. Some Shade checks were artificially unanswerable for Veil/Wild.
+- **Promoted Veil Queen was treated as a Wraith**: `veil.ts` was the one army module missing promoted-Q dispatch, so a promoted FIDE Queen teleported, paid Essence to capture (driving the pool negative), and gave no check at 0 Essence. It is now a plain FIDE Queen (generator, threat model, and Essence accounting in `apply.ts`).
+- **Essence gain restricted to Bishop/Knight/Pawn capturers** per RULES.md: a King (or promoted Rook) capturing an enemy pawn no longer generates Essence.
+
+### Docs
+- `docs/RULES.md` → v2.1.1: homing rule rewritten (per-axis approach requirement); Shade-answer wording clarifies that every capture mechanism qualifies; changelog entry added.
+- `docs/RULES-INTERPRETATIONS.md`: four new rulings recorded under "Post-1.0 Fix Pass (v1.0.1)".
+
 ## 1.0.0 — 2026-06-30
 
 **v1.0.0 — Polish, docs, deploy**
