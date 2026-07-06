@@ -192,18 +192,64 @@ describe('Shade cannot capture', () => {
     const turns = legalTurns(state);
     // Shade (Q slot) on d4 should not capture the rook on d7
     expect(hasMove(turns, 'd4', 'd7')).toBe(false);
-    // Shade should stop before d7 (blocked) — d5, d6 are legal; d7 is not
+    // Empty squares on the file are legal; d7 (occupied) is not
     expect(hasMove(turns, 'd4', 'd5')).toBe(true);
     expect(hasMove(turns, 'd4', 'd6')).toBe(true);
+    // Ghostwalk (v2.1): the Shade may pass THROUGH the rook to the empty d8
+    expect(hasMove(turns, 'd4', 'd8')).toBe(true);
   });
+});
 
-  it('enemy piece blocks Shade sliding (no pass-through)', () => {
-    // Shade on a1, enemy rook on a4. Shade cannot reach a5, a6, etc.
+// ---------------------------------------------------------------------------
+// Shade Ghostwalk (v2.1): movement phases through pieces; threat does not
+// ---------------------------------------------------------------------------
+describe('Shade Ghostwalk', () => {
+  it('Shade passes through an enemy piece to empty squares beyond it', () => {
+    // Shade on a1, enemy rook on a4. Ghostwalk: a5..a8 reachable; a4 itself is not.
     const state = parseSfen('7k/8/8/8/r7/8/8/Q5K1/w/Phantom,Crown/-/-/0,0/-/0/5');
     const turns = legalTurns(state);
-    expect(hasMove(turns, 'a1', 'a5')).toBe(false);
-    expect(hasMove(turns, 'a1', 'a4')).toBe(false); // can't capture
-    expect(hasMove(turns, 'a1', 'a3')).toBe(true);  // can slide up to before the piece
+    expect(hasMove(turns, 'a1', 'a3')).toBe(true);
+    expect(hasMove(turns, 'a1', 'a4')).toBe(false); // occupied: can't land, can't capture
+    expect(hasMove(turns, 'a1', 'a5')).toBe(true);  // ghostwalked past the rook
+    expect(hasMove(turns, 'a1', 'a8')).toBe(true);
+  });
+
+  it('Shade passes through friendly pieces (out of the starting position)', () => {
+    // From the initial Phantom position, the Shade on d1 drifts through its
+    // own Thrall wall: d-file to d3..d8? d8 holds the enemy Shade, d7 a Thrall.
+    const state = initialState('Phantom', 'Phantom');
+    const turns = legalTurns(state);
+    expect(hasMove(turns, 'd1', 'd2')).toBe(false); // own Thrall occupies d2
+    expect(hasMove(turns, 'd1', 'd4')).toBe(true);  // through the wall
+    expect(hasMove(turns, 'd1', 'd6')).toBe(true);
+    expect(hasMove(turns, 'd1', 'd7')).toBe(false); // enemy Thrall occupies d7
+    expect(hasMove(turns, 'd1', 'h5')).toBe(true);  // diagonal through e2 Thrall
+  });
+
+  it('Ghostwalk does not extend threat: no check through a wall', () => {
+    // White Shade on e1, Black King on e8, White pawn-line piece on e4 blocks LOS.
+    // Shade can MOVE past e4, but gives no check through it.
+    const state = parseSfen('4k3/8/8/8/4N3/8/8/4Q1K1/b/Phantom,Crown/-/-/0,0/-/0/5');
+    const turns = legalTurns(state);
+    // Black king is NOT in check (knight on e4 blocks the Shade's line):
+    // any quiet Black king move like e8→d8 must be legal.
+    expect(hasMove(turns, 'e8', 'd8')).toBe(true);
+  });
+
+  it('promoted Phantom Queen does NOT Ghostwalk (blocked sliding, captures normally)', () => {
+    // No Shade on the board (Q-slot open) → Thrall on e7 may promote to Q.
+    // White King a1, Black King g1, Black rook e4.
+    const s0 = parseSfen('8/4P3/8/8/4r3/8/8/K5k1/w/Phantom,Crown/-/-/0,0/-/0/5');
+    const s1 = applyTurnUnchecked(s0, mv('e7', 'e8', 'Q'));
+    expect(s1.board[sq('e8')]?.promoted).toBe(true);
+    // Black rook steps up the file: e4→e5. Now the promoted Queen on e8 faces
+    // the rook on its own file with empty squares on both sides of it.
+    const s2 = applyTurnUnchecked(s1, mv('e4', 'e5'));
+    const turns = legalTurns(s2);
+    expect(hasMove(turns, 'e8', 'e6')).toBe(true);  // slides up to the blocker
+    expect(hasMove(turns, 'e8', 'e5')).toBe(true);  // CAPTURES it (Shade never could)
+    expect(hasMove(turns, 'e8', 'e4')).toBe(false); // blocked — no ghostwalk past it
+    expect(hasMove(turns, 'e8', 'e2')).toBe(false);
   });
 });
 

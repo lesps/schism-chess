@@ -226,7 +226,7 @@ Not yet implemented: notation; UI; PBM logic.
 
 Registered as both generator and ThreatModel for army `'Phantom'`.
 
-**Shade** (Q-slot): slides like a Queen, cannot capture, attacks all Queen-line squares for threat purposes. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`).
+**Shade** (Q-slot): moves along Queen lines with **Ghostwalk** (RULES v2.1) — movement passes through occupied squares (friendly and enemy alike), landing only on empty ones. Cannot capture. Threat is NOT ghostwalked: `attackedSquares` still stops at the first blocker (LOS), so no check through walls. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`). Promoted Phantom Queens are plain FIDE Queens (blocked sliding, capture normally, no Ghostwalk).
 
 **Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to unoccupied square that reduces Chebyshev distance to enemy king). No en passant given or received. Promote to standard FIDE pieces.
 
