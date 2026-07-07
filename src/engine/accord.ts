@@ -3,13 +3,16 @@ import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
 import { registerGenerator, availablePromotions } from './movegen';
 
-// Tuning knob: 'king-step' is the conservative default (Empowered pieces gain a
-// one-square move-or-capture in any direction). 'queen' upgrades the bonus to full
-// Queen sliding while in the Banner. Mutate via setAccordEmpowerment (e.g. in tests);
-// production code should rely on the default.
-export let ACCORD_EMPOWERMENT: 'king-step' | 'queen' = 'king-step';
+// Tuning knob. 'phalanx' (RULES v2.2 default): the formation parts for its own —
+// Empowered Rooks/Bishops slide THROUGH friendly pieces (enemies still block), and
+// Empowered Knights become Nightriders (the leap repeats in a straight line, passing
+// over friendly-occupied landing squares). Legacy modes kept for tests/experiments:
+// 'king-step' adds a one-square move-or-capture bonus; 'queen' adds full Queen
+// sliding. Mutate via setAccordEmpowerment (e.g. in tests); production code should
+// rely on the default.
+export let ACCORD_EMPOWERMENT: 'phalanx' | 'king-step' | 'queen' = 'phalanx';
 
-export function setAccordEmpowerment(mode: 'king-step' | 'queen'): void {
+export function setAccordEmpowerment(mode: 'phalanx' | 'king-step' | 'queen'): void {
   ACCORD_EMPOWERMENT = mode;
 }
 
@@ -86,6 +89,56 @@ function knightTargets(board: GameState['board'], sq: Square, color: Color): Squ
   return result;
 }
 
+// Phalanx slide (Empowerment v2.2): friendly pieces never block — the formation
+// parts to let its own through. The slider may not LAND on a friendly square, but
+// it passes over them freely. Enemy pieces block as usual (landing = capture).
+function phalanxSlideTargets(
+  board: GameState['board'], sq: Square, color: Color,
+  dirs: readonly (readonly [number, number])[],
+): Square[] {
+  const rank = sq >> 3, file = sq & 7;
+  const result: Square[] = [];
+  for (const [dr, df] of dirs) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      const tp = board[target];
+      if (tp) {
+        if (tp.color !== color) { result.push(target); break; } // capture, then stop
+        // friendly: not a landing square, but the ray continues through it
+      } else {
+        result.push(target);
+      }
+      r += dr; f += df;
+    }
+  }
+  return result;
+}
+
+// Phalanx Knight (Empowerment v2.2): a Nightrider through the formation — the
+// knight's leap repeats in a straight line. Empty and friendly-occupied landing
+// squares let the ride continue (friendly squares are not landable); the first
+// enemy piece is captured and ends the ride.
+function phalanxKnightTargets(board: GameState['board'], sq: Square, color: Color): Square[] {
+  const rank = sq >> 3, file = sq & 7;
+  const result: Square[] = [];
+  for (const [dr, df] of KNIGHT_DELTAS) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      const tp = board[target];
+      if (tp) {
+        if (tp.color !== color) { result.push(target); break; } // capture, then stop
+        // friendly: ride continues over it
+      } else {
+        result.push(target);
+      }
+      r += dr; f += df;
+    }
+  }
+  return result;
+}
+
 // King-step candidates: one square any direction, move-or-capture (excludes own-piece squares).
 function kingStepTargets(board: GameState['board'], sq: Square, color: Color): Square[] {
   const rank = sq >> 3, file = sq & 7;
@@ -136,6 +189,14 @@ function addEmpoweredSlideMoves(
   dirs: readonly (readonly [number, number])[], empowered: boolean, turns: Turn[],
 ): void {
   const board = state.board;
+
+  // Phalanx mode REPLACES the native slide (its targets are a superset: the same
+  // rays, but friendly blockers are transparent).
+  if (empowered && ACCORD_EMPOWERMENT === 'phalanx') {
+    for (const t of phalanxSlideTargets(board, sq, color, dirs)) pushMove(turns, sq, t);
+    return;
+  }
+
   const native = slideTargets(board, sq, color, dirs);
   const seen = new Set<Square>(native);
   for (const t of native) pushMove(turns, sq, t);
@@ -153,6 +214,14 @@ function addEmpoweredKnightMoves(
   state: GameState, sq: Square, color: Color, empowered: boolean, turns: Turn[],
 ): void {
   const board = state.board;
+
+  // Phalanx mode REPLACES the native knight move set (the Nightrider's first leap
+  // IS the native knight move, so this is a superset).
+  if (empowered && ACCORD_EMPOWERMENT === 'phalanx') {
+    for (const t of phalanxKnightTargets(board, sq, color)) pushMove(turns, sq, t);
+    return;
+  }
+
   const native = knightTargets(board, sq, color);
   const seen = new Set<Square>(native);
   for (const t of native) pushMove(turns, sq, t);
@@ -272,6 +341,45 @@ function addEmpowermentAttacks(sq: Square, board: GameState['board'], out: Set<S
   }
 }
 
+// Phalanx slide attacks: every square along the ray is attacked — friendly squares
+// are defended THROUGH (and the ray continues past them); the first enemy square is
+// attacked and ends the ray. Mirrors phalanxSlideTargets exactly, plus friendly
+// squares (defended).
+function addPhalanxSlideAttacks(
+  sq: Square, board: GameState['board'], color: Color,
+  dirs: readonly (readonly [number, number])[], out: Set<Square>,
+): void {
+  const rank = sq >> 3, file = sq & 7;
+  for (const [dr, df] of dirs) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      out.add(target);
+      const tp = board[target];
+      if (tp && tp.color !== color) break; // enemy ends the ray; friendly is passed through
+      r += dr; f += df;
+    }
+  }
+}
+
+// Phalanx Knight (Nightrider) attacks: each landing square along the repeated leap,
+// continuing over empty and friendly squares, ending at the first enemy.
+function addPhalanxKnightAttacks(
+  sq: Square, board: GameState['board'], color: Color, out: Set<Square>,
+): void {
+  const rank = sq >> 3, file = sq & 7;
+  for (const [dr, df] of KNIGHT_DELTAS) {
+    let r = rank + dr, f = file + df;
+    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+      const target = r * 8 + f;
+      out.add(target);
+      const tp = board[target];
+      if (tp && tp.color !== color) break;
+      r += dr; f += df;
+    }
+  }
+}
+
 function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
   const attacked = new Set<Square>();
   const board = state.board;
@@ -286,8 +394,12 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
       case 'Q':
         if (piece.promoted) {
           // Promoted FIDE Queen: full sliding attacks; Banner-eligible
-          addSlideAttacks(sq, board, ALL_DIRS, attacked);
-          if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
+          if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
+            addPhalanxSlideAttacks(sq, board, byColor, ALL_DIRS, attacked);
+          } else {
+            addSlideAttacks(sq, board, ALL_DIRS, attacked);
+            if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
+          }
         }
         // else: Herald cannot capture and contributes no threat.
         break;
@@ -304,6 +416,10 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         break;
       }
       case 'N': {
+        if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
+          addPhalanxKnightAttacks(sq, board, byColor, attacked);
+          break;
+        }
         for (const [dr, df] of KNIGHT_DELTAS) {
           const r = rank + dr, f = file + df;
           if (r >= 0 && r <= 7 && f >= 0 && f <= 7) attacked.add(r * 8 + f);
@@ -312,11 +428,19 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         break;
       }
       case 'B': {
+        if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
+          addPhalanxSlideAttacks(sq, board, byColor, DIAGONALS, attacked);
+          break;
+        }
         addSlideAttacks(sq, board, DIAGONALS, attacked);
         if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
         break;
       }
       case 'R': {
+        if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
+          addPhalanxSlideAttacks(sq, board, byColor, ORTHOGONALS, attacked);
+          break;
+        }
         addSlideAttacks(sq, board, ORTHOGONALS, attacked);
         if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
         break;

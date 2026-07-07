@@ -178,18 +178,19 @@ test.describe('Accord — empowered Knight in Banner zone', () => {
   test('empowered Knight has more than 8 legal destinations', async ({ page }) => {
     await page.click('[data-sq="36"]');
 
-    // Standard Knight has ≤ 8 moves; empowerment adds king-step bonus moves
+    // Standard Knight has ≤ 8 moves; the Nightrider rides add extended destinations
     const destCount = await page.locator('[data-sq].hl-move, [data-sq].hl-capture').count();
     expect(destCount).toBeGreaterThan(8);
   });
 
-  test('empowered Knight can execute a king-step bonus move', async ({ page }) => {
+  test('empowered Knight can execute a Nightrider ride', async ({ page }) => {
     await page.click('[data-sq="36"]');
 
-    // e6 (sq 44) is adjacent to e5 — empowered king-step, empty → hl-move
-    await expect(page.locator('[data-sq="44"]')).toHaveClass(/hl-move/);
+    // g1 (sq 6) is two knight-leaps from e5 along (-2,+1) via empty f3 —
+    // an empowered Nightrider ride, not a native knight move -> hl-move
+    await expect(page.locator('[data-sq="6"]')).toHaveClass(/hl-move/);
 
-    await page.click('[data-sq="44"]');
+    await page.click('[data-sq="6"]');
     await expect(page.getByText('Black to move')).toBeVisible({ timeout: 5000 });
   });
 });

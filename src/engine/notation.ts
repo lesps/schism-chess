@@ -98,7 +98,9 @@ function boardAfterPrimary(state: GameState, primary: PrimaryAction): (Piece | n
       for (let df = -1; df <= 1; df++) {
         if (dr === 0 && df === 0) continue;
         const r = wr + dr, f = wf + df;
-        if (r >= 0 && r <= 7 && f >= 0 && f <= 7) b[r * 8 + f] = null;
+        if (r < 0 || r > 7 || f < 0 || f > 7) continue;
+        if (b[r * 8 + f]?.slot === 'K') continue; // royals are spared (RULES v2.2)
+        b[r * 8 + f] = null;
       }
     }
   } else if (primary.type === 'rampage') {
