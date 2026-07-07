@@ -4,7 +4,9 @@
 // phrases "Piercing check" and "Exhausted" — keep those words.
 
 export const HINTS = {
-  FIRST_MOVE: 'Tap one of your pieces to see its legal moves.',
+  FIRST_MOVE: 'Tap any piece to see what it does and where it can move.',
+  NO_LEGAL_MOVES: 'No legal moves right now.',
+  INSPECT_WAITING: "It isn't this piece's turn.",
   TWINS_WARLORD_IN_CHECK: 'Warlord in check — your main move alone must escape it. Rally cannot save a lone checked Warlord.',
   TWINS_BOTH_IN_CHECK: 'Both Warlords in check — use your move and your Rally together to bring both to safety.',
   TWINS_RALLY_PHASE: 'Rally (optional): tap a pink dot to step a Warlord one square, or skip.',

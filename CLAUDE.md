@@ -19,7 +19,7 @@ src/pbm/       # Pure TS — play-by-post logic (S10: types, codec, game flow, v
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
-docs/          # RULES.md (canonical ruleset, v2.0.1); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
+docs/          # RULES.md (canonical ruleset, v2.1.1); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
 ```
 
 ## Engine Purity Rule
@@ -74,7 +74,7 @@ Done: S14 (**v1.0.0 shipped** — polish, docs, deploy: `README.md`, `docs/ARCHI
 
 The following are deferred and tracked as GitHub issues:
 
-1. **SVG piece set** — replace Unicode glyphs with original SVGs behind the existing `PieceGlyph` seam. The slot/color API is unchanged; only the visual output changes.
+1. ~~**SVG piece set**~~ — **done post-1.0**: original inline SVGs in `src/ui/pieceArt.tsx` (`PieceIcon`), rendered behind the `PieceGlyph` seam. Standard FIDE set + 10 army-specific shapes (Shade, Thrall, Herald, Warlord, Wraith, Wisp, Apex, Behemoth, Stalker, Bronco); promoted pieces fall back to the standard set. Also added: selected-piece move-reminder bar (`getPieceInfo` in `shared.ts`, rendered by `GameScreen`, tested in `tests/ui/pieceArt.test.tsx`).
 2. **Network backend** — plug in a server as a payload mailbox above the `Transport` interface (see `docs/PBM-PROTOCOL.md §Network` and `docs/ARCHITECTURE.md §Transport seam`). No other code changes needed.
 3. **Sound** — move/capture/check audio; `prefers-reduced-motion` + a mute toggle.
 4. **AI opponent** — single-player mode; engine is already pure TS so a WASM worker is natural.
@@ -226,11 +226,11 @@ Not yet implemented: notation; UI; PBM logic.
 
 Registered as both generator and ThreatModel for army `'Phantom'`.
 
-**Shade** (Q-slot): slides like a Queen, cannot capture, attacks all Queen-line squares for threat purposes. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`).
+**Shade** (Q-slot): moves along Queen lines with **Ghostwalk** (RULES v2.1) — movement passes through occupied squares (friendly and enemy alike), landing only on empty ones. Cannot capture. Threat is NOT ghostwalked: `attackedSquares` still stops at the first blocker (LOS), so no check through walls. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`). Promoted Phantom Queens are plain FIDE Queens (blocked sliding, capture normally, no Ghostwalk).
 
-**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to unoccupied square that reduces Chebyshev distance to enemy king). No en passant given or received. Promote to standard FIDE pieces.
+**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to an unoccupied square that steps genuinely toward the enemy king: Chebyshev distance strictly decreases AND neither axis distance increases). No en passant given or received. Promote to standard FIDE pieces.
 
-`THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if it reduces distance to at least one Warlord.
+`THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if the step homes toward at least one Warlord.
 
 ## Accord army (`src/engine/accord.ts`)
 

@@ -13,12 +13,12 @@ import '../../src/engine/index';
 
 function sq(alg: string): number { return algebraicToSquare(alg); }
 
-type PieceSpec = { slot: Slot; color: Color; at: string };
+type PieceSpec = { slot: Slot; color: Color; at: string; promoted?: boolean };
 
 function buildBoard(pieces: PieceSpec[]): (Piece | null)[] {
   const board = new Array<Piece | null>(64).fill(null);
-  for (const { slot, color, at } of pieces) {
-    board[algebraicToSquare(at)] = { slot, color };
+  for (const { slot, color, at, promoted } of pieces) {
+    board[algebraicToSquare(at)] = promoted ? { slot, color, promoted: true } : { slot, color };
   }
   return board;
 }
@@ -634,5 +634,94 @@ describe('Threefold repetition and Essence', () => {
 
     // Not threefold: the key includes Essence; essence=1 ≠ essence=2 keys don't mix
     expect(gameStatus(s).type).not.toBe('draw');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Promoted pieces are standard FIDE pieces with no Veil abilities
+// ---------------------------------------------------------------------------
+describe('Promoted Veil Queen is not a Wraith', () => {
+  // White promoted Queen (Q-slot, promoted=true) at d4; enemy pawn on the
+  // d4–f6 diagonal; Essence W=0 throughout — a real Wraith would be inert.
+  const pieces: PieceSpec[] = [
+    { slot: 'K', color: 'W', at: 'a1' },
+    { slot: 'Q', color: 'W', at: 'd4', promoted: true },
+    { slot: 'K', color: 'B', at: 'a8' },
+    { slot: 'P', color: 'B', at: 'f6' },
+  ];
+
+  it('captures at Essence=0 and generates no teleports', () => {
+    const state = makeState(pieces, { essence: { W: 0, B: 0 } });
+    const turns = legalTurns(state);
+    // Slide capture d4xf6 works with an empty Essence pool
+    expect(hasStdMove(turns, 'd4', 'f6')).toBe(true);
+    // A promoted Queen never teleports
+    const teleports = turns.filter(t =>
+      t.primary.type === 'teleport' && (t.primary as TeleportMove).from === sq('d4'));
+    expect(teleports.length).toBe(0);
+  });
+
+  it('capturing costs no Essence (and gains none)', () => {
+    const state = makeState(pieces, { essence: { W: 0, B: 0 } });
+    const cap = legalTurns(state).find(t =>
+      t.primary.type === 'standard' &&
+      (t.primary as StandardMove).from === sq('d4') &&
+      (t.primary as StandardMove).to === sq('f6'),
+    )!;
+    const after = applyTurnUnchecked(state, cap);
+    expect(after.essence.W).toBe(0); // no Wraith spend, no B/N/P gain
+    expect(after.lastTurnMeta).toBeUndefined();
+  });
+
+  it('gives check at Essence=0 (no Essence gating)', () => {
+    // Promoted Queen at a4 holds rank 4; enemy king at e4 may not stay on the rank.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'g1' },
+      { slot: 'Q', color: 'W', at: 'a4', promoted: true },
+      { slot: 'K', color: 'B', at: 'e4' },
+    ], {
+      essence: { W: 0, B: 0 },
+      sideToMove: 'B',
+      armies: { W: 'Veil', B: 'Crown' },
+    });
+    const turns = legalTurns(state);
+    expect(hasStdMove(turns, 'e4', 'd4')).toBe(false); // still on the checked rank
+    expect(hasStdMove(turns, 'e4', 'f4')).toBe(false);
+    expect(hasStdMove(turns, 'e4', 'e5')).toBe(true);  // off the rank
+  });
+});
+
+describe('Essence gain is limited to Bishop/Knight/Pawn capturers', () => {
+  it('King capturing an enemy pawn gains no Essence', () => {
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'e4' },
+      { slot: 'K', color: 'B', at: 'a8' },
+      { slot: 'P', color: 'B', at: 'e5' },  // directly ahead — does not check e4
+    ], { essence: { W: 1, B: 0 } });
+    const cap = legalTurns(state).find(t =>
+      t.primary.type === 'standard' &&
+      (t.primary as StandardMove).from === sq('e4') &&
+      (t.primary as StandardMove).to === sq('e5'),
+    )!;
+    const after = applyTurnUnchecked(state, cap);
+    expect(after.essence.W).toBe(1); // unchanged
+    expect(after.lastTurnMeta).toBeUndefined();
+  });
+
+  it('promoted Rook capturing an enemy pawn gains no Essence', () => {
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'R', color: 'W', at: 'd4', promoted: true }, // FIDE Rook, not a Wisp
+      { slot: 'K', color: 'B', at: 'a8' },
+      { slot: 'P', color: 'B', at: 'd6' },
+    ], { essence: { W: 1, B: 0 } });
+    const cap = legalTurns(state).find(t =>
+      t.primary.type === 'standard' &&
+      (t.primary as StandardMove).from === sq('d4') &&
+      (t.primary as StandardMove).to === sq('d6'),
+    )!;
+    const after = applyTurnUnchecked(state, cap);
+    expect(after.essence.W).toBe(1); // unchanged
+    expect(after.lastTurnMeta).toBeUndefined();
   });
 });

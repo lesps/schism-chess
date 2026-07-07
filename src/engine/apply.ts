@@ -49,15 +49,19 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
 
     // Essence accounting for Veil army
     if (moverArmy === 'Veil' && isCapture && capturedPiece) {
-      if (piece.slot === 'Q') {
-        // Wraith capture costs 1 Essence (no gain even if capturing a pawn)
+      if (piece.slot === 'Q' && !piece.promoted) {
+        // Wraith capture costs 1 Essence (no gain even if capturing a pawn).
+        // A promoted FIDE Queen is not the Wraith and has no Essence mechanics.
         const prev = essence[moverColor];
         essence = moverColor === 'W'
           ? { W: prev - 1, B: essence.B }
           : { W: essence.W, B: prev - 1 };
         lastTurnMeta = { essenceDelta: { color: moverColor, from: prev, to: prev - 1 } };
-      } else if (capturedPiece.slot === 'P') {
-        // Non-Wraith captures enemy pawn/Thrall: gain 1 Essence (capped at 4)
+      } else if (capturedPiece.slot === 'P' &&
+                 (piece.slot === 'B' || piece.slot === 'N' || piece.slot === 'P')) {
+        // Bishop/Knight/Pawn captures enemy pawn/Thrall: gain 1 Essence (capped at 4).
+        // Per RULES.md the gain list is exactly B/N/P — King and promoted-Rook
+        // pawn captures do not generate Essence.
         const prev = essence[moverColor];
         const next = Math.min(4, prev + 1);
         essence = moverColor === 'W'
@@ -98,8 +102,8 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     const { from, to, isCapture } = primary as TeleportMove;
     const piece = board[from]!;
 
-    // Essence accounting for Veil Wraith teleport-capture
-    if (moverArmy === 'Veil' && isCapture && piece.slot === 'Q') {
+    // Essence accounting for Veil Wraith teleport-capture (promoted Queens never teleport)
+    if (moverArmy === 'Veil' && isCapture && piece.slot === 'Q' && !piece.promoted) {
       const prev = essence[moverColor];
       essence = moverColor === 'W'
         ? { W: prev - 1, B: essence.B }
