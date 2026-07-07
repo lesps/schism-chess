@@ -149,3 +149,25 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 **Code:** the gain branch in `applyTurnUnchecked` (`src/engine/apply.ts`) requires `piece.slot ∈ {B, N, P}`.
 
 **Rationale:** RULES.md enumerates the gain sources exactly: "+1 whenever a non-Wraith Veil piece (Bishop, Knight, or Pawn) captures an enemy pawn." The previous code granted the gain to any non-Wraith capturer, including the King.
+
+---
+
+## v2.2 Balance Pass
+
+### Phalanx Nightrider path semantics
+
+**Ruling:** An Empowered Knight's ride continues over **empty and friendly-occupied** landing squares alike, and ends by capturing the **first enemy** on a landing square. It may never land on a friendly square. (A classical Nightrider is blocked by any occupied landing square; the phalanx version is friendly-transparent to match the Empowered slide rule — the formation parts for its own.)
+
+**Code:** `phalanxKnightTargets` / `addPhalanxKnightAttacks` in `src/engine/accord.ts`.
+
+### Phalanx threat includes friendly squares along the ray
+
+**Ruling:** For threat purposes an Empowered slider (or Nightrider) **defends every friendly piece along its ray** and keeps attacking beyond them; the attack set ends at (and includes) the first enemy square. So a Banner rook behind its own pawn wall checks an enemy king on the far side of the wall, and an enemy king may not capture a piece that is phalanx-defended through another piece.
+
+**Code:** `addPhalanxSlideAttacks` / `addPhalanxKnightAttacks` mirror the movement functions plus friendly squares.
+
+### Shatter spares all K-slot pieces, both colors
+
+**Ruling:** Shatter removes every adjacent piece **except K-slot pieces of either color**. Only a friendly Warlord can ever legally be adjacent (an enemy royal adjacent to a Warlord would already be in check on its own turn, which is illegal), so the both-colors formulation is a robustness choice with no reachable gameplay difference — it just guarantees Shatter can never delete a royal outright even in hand-built (`?sfen=`) positions.
+
+**Code:** K-slot filtering in `twins.ts` `applyShatterToBoard`, `apply.ts` shatter branch, and `src/ui/shared.ts` `extractCaptures` / `ShatterPreview`.

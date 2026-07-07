@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import {
   legalTurns, applyTurnUnchecked, gameStatus, algebraicToSquare, getThreatModel,
 } from '../../src/engine/index';
@@ -63,7 +63,7 @@ function movesFrom(turns: Turn[], from: string): Set<number> {
 
 // Always restore the default empowerment mode after tests that flip it.
 afterEach(() => {
-  setAccordEmpowerment('king-step');
+  setAccordEmpowerment('phalanx');
 });
 
 // ---------------------------------------------------------------------------
@@ -116,7 +116,9 @@ describe('Banner zone membership', () => {
 // ---------------------------------------------------------------------------
 // Empowered rook
 // ---------------------------------------------------------------------------
-describe('Empowered rook', () => {
+describe('Empowered rook (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   it('diagonal king-step capture generated inside the zone', () => {
     // Herald at d4; Rook at e5 (in zone, Chebyshev dist 1). Enemy knight at f6 (diagonal
     // king-step from e5). Native rook moves never reach f6 — only empowerment does.
@@ -148,7 +150,9 @@ describe('Empowered rook', () => {
 // ---------------------------------------------------------------------------
 // Empowered check
 // ---------------------------------------------------------------------------
-describe('Empowered check', () => {
+describe('Empowered check (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   it('empowered rook diagonally adjacent to enemy king delivers check', () => {
     const state = makeState([
       { slot: 'K', color: 'W', at: 'a1' },
@@ -176,7 +180,9 @@ describe('Empowered check', () => {
 // ---------------------------------------------------------------------------
 // Herald-move-driven checks (positional empowerment)
 // ---------------------------------------------------------------------------
-describe('Herald movement gives/removes empowered check', () => {
+describe('Herald movement gives/removes empowered check (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   it('Herald moving into Banner range of the rook gives check', () => {
     // Rook at e5; enemy King at f6. Herald starts at d3 (Chebyshev dist to e5 = 2, out of zone)
     // then steps to d4 (dist 1, in zone) — empowerment (and check) switches on.
@@ -236,7 +242,9 @@ describe('Herald movement gives/removes empowered check', () => {
 // ---------------------------------------------------------------------------
 // Mate that depends on empowerment
 // ---------------------------------------------------------------------------
-describe('Empowerment-dependent checkmate', () => {
+describe('Empowerment-dependent checkmate (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   // Black king at h8. White Knight at g7 — its native jumps (e6/f5/h5) never touch h8, g8, or
   // h7, so the empowered king-step bonus is the *only* thing that checks h8 and covers the other
   // two flight squares (g8, h7). White Herald at h6 sits in the Banner zone of g7 (Chebyshev
@@ -275,7 +283,9 @@ describe('Empowerment-dependent checkmate', () => {
 // ---------------------------------------------------------------------------
 // Edge king-step out of the zone
 // ---------------------------------------------------------------------------
-describe('Empowered piece stepping outside the zone', () => {
+describe('Empowered piece stepping outside the zone (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   it('rook on the zone edge may king-step diagonally out of the zone', () => {
     // Herald at d4; Rook at e5 (in zone). Diagonal king-step to f6 (outside the zone, dist 2 from d4).
     const state = makeState([
@@ -327,7 +337,9 @@ describe('Pawns are never Empowered', () => {
 // ---------------------------------------------------------------------------
 // Promoted Rook/Bishop/Knight are Banner-eligible
 // ---------------------------------------------------------------------------
-describe('Promoted pieces are Banner-eligible', () => {
+describe('Promoted pieces are Banner-eligible (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   it('a pawn promoting to Rook inside the zone is immediately empowered', () => {
     // White pawn on d7 promotes on d8; Herald at e8 (zone includes d8).
     const state = makeState([
@@ -356,7 +368,9 @@ describe('Promoted pieces are Banner-eligible', () => {
 // ---------------------------------------------------------------------------
 // Empowered knight: exact enumeration
 // ---------------------------------------------------------------------------
-describe('Empowered knight move set', () => {
+describe('Empowered knight move set (legacy king-step mode)', () => {
+  beforeEach(() => { setAccordEmpowerment('king-step'); });
+
   it('knight in the Banner generates exactly knight-moves union king-step squares', () => {
     // Knight at d4 (also the Herald's own square zone-member trivially via co-location is avoided;
     // place Herald at d4 too is impossible (occupied) — put Herald at e4, Knight at d4 (in zone).
@@ -382,8 +396,8 @@ describe('Empowered knight move set', () => {
 // Flag flip: 'queen' mode
 // ---------------------------------------------------------------------------
 describe("ACCORD_EMPOWERMENT='queen' mode", () => {
-  it('default export value is king-step', () => {
-    expect(ACCORD_EMPOWERMENT).toBe('king-step');
+  it('default export value is phalanx', () => {
+    expect(ACCORD_EMPOWERMENT).toBe('phalanx');
   });
 
   it('rook in zone slides diagonally across the whole board in queen mode', () => {
@@ -488,5 +502,144 @@ describe('Cross-army: Crown vs Accord', () => {
       expect(status.by).toBe('invasion');
       expect(status.winner).toBe('W');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phalanx empowerment (RULES v2.2 default): the formation parts for its own
+// ---------------------------------------------------------------------------
+describe('Phalanx empowerment (default mode)', () => {
+  it('default mode is phalanx', () => {
+    expect(ACCORD_EMPOWERMENT).toBe('phalanx');
+  });
+
+  it('empowered rook slides through a friendly pawn and captures beyond it', () => {
+    // Herald d4; Rook d5 (in zone); friendly pawn d6; enemy knight d8.
+    // Native rook is blocked at d6. Phalanx: passes over d6 (cannot land there),
+    // lands on d7, captures d8.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'd4' },
+      { slot: 'R', color: 'W', at: 'd5' },
+      { slot: 'P', color: 'W', at: 'd6' },
+      { slot: 'K', color: 'B', at: 'h1' },
+      { slot: 'N', color: 'B', at: 'd8' },
+    ]);
+    const turns = legalTurns(state);
+    expect(hasStdMove(turns, 'd5', 'd7')).toBe(true);  // through the pawn
+    expect(hasStdMove(turns, 'd5', 'd8')).toBe(true);  // capture beyond it
+    expect(hasStdMove(turns, 'd5', 'd6')).toBe(false); // cannot LAND on a friendly
+  });
+
+  it('empowered bishop slides through a friendly pawn; the first enemy still blocks', () => {
+    // Herald d4; Bishop e5 (in zone); friendly pawn f6; enemy rook g7; h8 beyond.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'd4' },
+      { slot: 'B', color: 'W', at: 'e5' },
+      { slot: 'P', color: 'W', at: 'f6' },
+      { slot: 'R', color: 'B', at: 'g7' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const turns = legalTurns(state);
+    expect(hasStdMove(turns, 'e5', 'g7')).toBe(true);  // capture through the pawn
+    expect(hasStdMove(turns, 'e5', 'f6')).toBe(false); // friendly landing
+    expect(hasStdMove(turns, 'e5', 'h8')).toBe(false); // the enemy ends the ray
+  });
+
+  it('empowered rook gives check straight through its own pawn wall', () => {
+    // Herald d4; Rook d5; friendly pawn d6; enemy King d8 → check through the wall.
+    const checking = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'd4' },
+      { slot: 'R', color: 'W', at: 'd5' },
+      { slot: 'P', color: 'W', at: 'd6' },
+      { slot: 'K', color: 'B', at: 'd8' },
+    ]);
+    expect(accordThreatModel.royalsInCheck(checking, 'B')).toEqual([sq('d8')]);
+
+    // Herald far away (g1): the rook reverts to a normal blocked slide — no check.
+    const reverted = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'g1' },
+      { slot: 'R', color: 'W', at: 'd5' },
+      { slot: 'P', color: 'W', at: 'd6' },
+      { slot: 'K', color: 'B', at: 'd8' },
+    ]);
+    expect(accordThreatModel.royalsInCheck(reverted, 'B')).toEqual([]);
+  });
+
+  it('empowered knight rides its leap in a straight line (Nightrider)', () => {
+    // Herald e4; Knight d4 (in zone). Along the (+2,+1) line: d4 → e6 → f8.
+    const open = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'e4' },
+      { slot: 'N', color: 'W', at: 'd4' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const openTurns = legalTurns(open);
+    expect(hasStdMove(openTurns, 'd4', 'e6')).toBe(true); // first leap
+    expect(hasStdMove(openTurns, 'd4', 'f8')).toBe(true); // the ride continues
+  });
+
+  it('nightrider ride: enemy on a landing square is captured and ends the ride', () => {
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'e4' },
+      { slot: 'N', color: 'W', at: 'd4' },
+      { slot: 'N', color: 'B', at: 'e6' }, // on the d4→e6→f8 line
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const turns = legalTurns(state);
+    expect(hasStdMove(turns, 'd4', 'e6')).toBe(true);  // capture
+    expect(hasStdMove(turns, 'd4', 'f8')).toBe(false); // ride ends at the enemy
+  });
+
+  it('nightrider ride passes over a friendly stepping stone', () => {
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'e4' },
+      { slot: 'N', color: 'W', at: 'd4' },
+      { slot: 'P', color: 'W', at: 'e6' }, // friendly on the first landing square
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const turns = legalTurns(state);
+    expect(hasStdMove(turns, 'd4', 'e6')).toBe(false); // cannot land on a friendly
+    expect(hasStdMove(turns, 'd4', 'f8')).toBe(true);  // but rides over it
+  });
+
+  it('knight outside the Banner is a plain knight (no ride)', () => {
+    // No Herald in range: d4 knight has only single leaps.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'h8' }, // Herald far away
+      { slot: 'N', color: 'W', at: 'd4' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const turns = legalTurns(state);
+    expect(hasStdMove(turns, 'd4', 'e6')).toBe(true);  // native leap
+    expect(hasStdMove(turns, 'd4', 'f8')).toBe(false); // no extended ride
+  });
+
+  it('a pawn promoting to Rook inside the zone immediately slides through friendlies', () => {
+    // Herald e8; pawn d7 promotes on d8; friendly knight d6 sits on the new rook's file.
+    const state = makeState([
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'e8' },
+      { slot: 'P', color: 'W', at: 'd7' },
+      { slot: 'N', color: 'W', at: 'd6' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const promo = legalTurns(state).find(t =>
+      t.primary.type === 'standard' &&
+      (t.primary as StandardMove).from === sq('d7') &&
+      (t.primary as StandardMove).to === sq('d8') &&
+      (t.primary as StandardMove).promotion === 'R',
+    )!;
+    expect(promo).toBeDefined();
+    const after = applyTurnUnchecked(state, promo);
+    const attacked = accordThreatModel.attackedSquares(after, 'W');
+    expect(attacked.has(sq('d6'))).toBe(true); // the friendly knight is defended…
+    expect(attacked.has(sq('d5'))).toBe(true); // …and the ray continues past it
   });
 });

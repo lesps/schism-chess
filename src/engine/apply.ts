@@ -135,7 +135,8 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
 
   } else if (primary.type === 'shatter') {
     const sh = primary as Shatter;
-    const nbrs = shatterNeighbors(sh.warlordSquare);
+    // Royals (K-slot) are spared (RULES v2.2) — a paired Warlord is never harmed.
+    const nbrs = shatterNeighbors(sh.warlordSquare).filter(n => board[n]?.slot !== 'K');
     // Shatter resets the halfmove clock iff it removes at least one piece (treat as capture).
     const removedAny = nbrs.some(n => board[n] !== null);
     halfmoveClock = removedAny ? 0 : halfmoveClock + 1;

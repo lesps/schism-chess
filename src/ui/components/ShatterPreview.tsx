@@ -15,7 +15,7 @@ export function ShatterPreview({ warlordSquare, gameState, onConfirm, onCancel }
   const neighbors = squareNeighbors(warlordSquare);
   const doomed = neighbors
     .map(sq => ({ sq, piece: board[sq] }))
-    .filter(x => x.piece !== null);
+    .filter(x => x.piece !== null && x.piece.slot !== 'K'); // royals are spared
 
   const fileOf = (sq: Square) => String.fromCharCode(97 + (sq % 8));
   const rankOf = (sq: Square) => Math.floor(sq / 8) + 1;

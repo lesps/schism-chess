@@ -19,7 +19,7 @@ src/pbm/       # Pure TS — play-by-post logic (S10: types, codec, game flow, v
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
-docs/          # RULES.md (canonical ruleset, v2.1.1); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
+docs/          # RULES.md (canonical ruleset, v2.2); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
 ```
 
 ## Engine Purity Rule
@@ -238,9 +238,9 @@ Registered as both generator and ThreatModel for army `'Accord'`.
 
 **Herald** (Q-slot): king-step move only, **cannot capture** (target square must be empty). Not royal — never appears in `royalsInCheck`, contributes zero attacked squares (same convention as Veil's Wisp), and is captured like any ordinary piece by the opponent's own movegen.
 
-**Banner**: `bannerZone(board, color)` (exported) returns the Chebyshev-distance-≤1 zone around the friendly Herald, clipped at the board edge (4 squares in a corner, 6 on an edge, 9 in the open). A friendly Knight/Bishop/Rook standing in that zone is **Empowered** — computed fresh from the current board on every call to the generator and to `attackedSquares`, so checks appear/vanish purely positionally (Herald moves, dies, or the piece leaves the zone) with no extra bookkeeping. Empowerment bonus targets are deduped against the piece's native move/attack set before being added (`accord.ts`'s `slideTargets`/`knightTargets`/`kingStepTargets` helpers), so there are no duplicate `Turn`s.
+**Banner**: `bannerZone(board, color)` (exported) returns the Chebyshev-distance-≤1 zone around the friendly Herald, clipped at the board edge (4 squares in a corner, 6 on an edge, 9 in the open). A friendly Knight/Bishop/Rook standing in that zone is **Empowered** — computed fresh from the current board on every call to the generator and to `attackedSquares`, so checks appear/vanish purely positionally (Herald moves, dies, or the piece leaves the zone) with no extra bookkeeping.
 
-**`ACCORD_EMPOWERMENT: 'king-step' | 'queen'`** (default `'king-step'`) — module-level flag in `accord.ts`, mutated only via the exported `setAccordEmpowerment(mode)` (ES module live-binding; importers read `ACCORD_EMPOWERMENT` directly but must call the setter to change it, e.g. in test `afterEach`). `'king-step'`: Empowered pieces gain a one-square move-or-capture in any direction. `'queen'`: the bonus becomes full Queen sliding from the piece's square instead. Pawns are never Empowered; promoted R/B/N are Empowered normally (promotion carries no metadata, so this falls out of reading the board as-is).
+**`ACCORD_EMPOWERMENT: 'phalanx' | 'king-step' | 'queen'`** (default `'phalanx'`, RULES v2.2) — module-level flag in `accord.ts`, mutated only via the exported `setAccordEmpowerment(mode)` (ES module live-binding; importers read `ACCORD_EMPOWERMENT` directly but must call the setter to change it, e.g. in test `afterEach`). `'phalanx'`: Empowered R/B slide **through friendly pieces** (may not land on them; enemies block/capture normally) and Empowered N becomes a **Nightrider** (leap repeats in a line; empty and friendly landing squares let the ride continue; first enemy is captured and ends it) — this mode REPLACES the native move/attack set (`phalanxSlideTargets`/`phalanxKnightTargets`, both supersets of native). Threat mirrors movement, with friendly squares along a phalanx ray counted as defended. Legacy `'king-step'` (one-square move-or-capture bonus) and `'queen'` (full Queen-slide bonus) are union-with-native, deduped via `slideTargets`/`knightTargets`/`kingStepTargets`. Pawns are never Empowered; promoted R/B/N are Empowered normally (promotion carries no metadata, so this falls out of reading the board as-is).
 
 Pawns/King have no Accord-specific behavior (King is a plain non-castling king-step royal, matching the Phantom/Veil convention — only Crown gets castling rights from `initialState`).
 
@@ -252,7 +252,7 @@ Registered as both generator and ThreatModel for army `'Twins'`.
 
 **Rally** (optional bonus step): after the primary action, exactly one Warlord may move one square to an unoccupied square. Non-capturing. May not move into check. Encoded as `Turn.rally: RallyStep | undefined`.
 
-**Shatter** (primary action type `'shatter'`): the Warlord stays in place and atomically removes all pieces on its 8 surrounding squares (friendly and enemy alike). Bypasses `captureConstraints`. Illegal if the other Warlord is adjacent (Chebyshev distance 1). Resets the halfmove clock if ≥ 1 piece is removed.
+**Shatter** (primary action type `'shatter'`): the Warlord stays in place and atomically removes all pieces on its 8 surrounding squares (friendly and enemy alike), **except royals — K-slot pieces are spared** (RULES v2.2; the old adjacent-Warlord illegality is gone, so paired Warlords can still Shatter). Bypasses `captureConstraints`. Resets the halfmove clock if ≥ 1 non-royal piece is removed. Spared-royal filtering lives in `twins.ts` `applyShatterToBoard`, `apply.ts`'s shatter branch, and the UI's `extractCaptures`/`ShatterPreview`.
 
 **One-action-per-check rule**: If exactly one Warlord is in check before the turn, the primary alone must fully resolve it (after primary, 0 Warlords in check). If both Warlords are in check (double check), the primary+rally together must resolve both — enforced by the kernel's universal end-state filter, with no additional intermediate constraint.
 

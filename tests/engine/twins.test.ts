@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  legalTurns, applyTurn, gameStatus,
+  legalTurns, applyTurn, applyTurnUnchecked, gameStatus,
   algebraicToSquare, parseSfen, initialState,
 } from '../../src/engine/index';
 import type { GameState, Piece, Slot, Color, Turn, StandardMove, RallyStep, Shatter } from '../../src/engine/index';
@@ -244,9 +244,10 @@ describe('double check resolution', () => {
 // ---------------------------------------------------------------------------
 describe('rally mechanics', () => {
   it('rally is non-capturing (occupied squares excluded)', () => {
-    // Warlord at e4, rally-target f4 occupied by enemy pawn → no rally to f4.
-    // Second Warlord at d4 (adjacent to e4) so Shatter at e4 is illegal,
-    // preventing Shatter from clearing f4 and creating a spurious rally target.
+    // Warlord at e4, rally-target f4 occupied by enemy pawn → no rally to f4
+    // after a standard primary. (A Shatter primary at e4/d4 legitimately clears
+    // f4 first — the rally then steps onto an EMPTY square, which is fine — so
+    // this test only inspects turns with standard primaries.)
     const state = makeState([
       { slot: 'K', color: 'W', at: 'e4' },
       { slot: 'K', color: 'W', at: 'd4' },
@@ -254,8 +255,9 @@ describe('rally mechanics', () => {
       { slot: 'K', color: 'B', at: 'h8' },
     ], { sideToMove: 'W' });
     const turns = legalTurns(state);
-    // No rally from e4 to f4 (occupied by enemy pawn)
+    // No rally from e4 to f4 (occupied by enemy pawn) alongside a standard primary
     const illegalRally = turns.some(t =>
+      t.primary.type === 'standard' && t.primary.from !== sq('e4') &&
       t.rally !== undefined && t.rally.from === sq('e4') && t.rally.to === sq('f4')
     );
     expect(illegalRally).toBe(false);
@@ -337,16 +339,23 @@ describe('shatter', () => {
     expect(after.board[sq('e4')]?.slot).toBe('K'); // Warlord stays
   });
 
-  it('Shatter illegal if other Warlord is adjacent', () => {
-    // Warlords at e4 and f4 (adjacent) → Shatter at e4 is illegal
+  it('Shatter legal with adjacent Warlord; the partner is spared (v2.2)', () => {
+    // Warlords at e4 and f4 (adjacent), enemy pawn at e5.
+    // Shatter at e4 is legal, clears the pawn, and leaves f4 untouched.
     const state = makeState([
       { slot: 'K', color: 'W', at: 'e4' },
       { slot: 'K', color: 'W', at: 'f4' },
+      { slot: 'P', color: 'B', at: 'e5' },
       { slot: 'K', color: 'B', at: 'h8' },
     ], { sideToMove: 'W' });
     const turns = legalTurns(state);
-    expect(hasShatter(turns, 'e4')).toBe(false);
-    expect(hasShatter(turns, 'f4')).toBe(false);
+    expect(hasShatter(turns, 'e4')).toBe(true);
+    expect(hasShatter(turns, 'f4')).toBe(true);
+
+    const after = applyTurnUnchecked(state, shatterTurn('e4'));
+    expect(after.board[sq('e5')]).toBeNull();      // pawn destroyed
+    expect(after.board[sq('f4')]?.slot).toBe('K'); // partner Warlord spared
+    expect(after.board[sq('e4')]?.slot).toBe('K'); // shattering Warlord stays
   });
 
   it('Shatter legal when Warlords are not adjacent', () => {
@@ -588,10 +597,13 @@ describe('applyTurn handles Shatter', () => {
   });
 
   it('applyTurn rejects an illegal Shatter', () => {
-    // Shatter at e4 when other Warlord is adjacent (f4) → illegal
+    // Shatter at e4 removes the own e5 pawn shielding e4 from the e8 rook →
+    // leaves the Warlord in check → illegal.
     const state = makeState([
       { slot: 'K', color: 'W', at: 'e4' },
-      { slot: 'K', color: 'W', at: 'f4' },
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'P', color: 'W', at: 'e5' }, // shields the Warlord
+      { slot: 'R', color: 'B', at: 'e8' }, // checks e4 once the shield is gone
       { slot: 'K', color: 'B', at: 'h8' },
     ], { sideToMove: 'W' });
     expect(() => applyTurn(state, shatterTurn('e4'))).toThrow('applyTurn: illegal move');

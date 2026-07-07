@@ -14,7 +14,7 @@ export const ARMY_NAMES: Record<Army, string> = {
 export const ARMY_TAGLINES: Record<Army, string> = {
   Crown:   'Highest raw material; castles; flexible',
   Phantom: 'Ghostwalking Shade; piercing check; homing Thralls',
-  Accord:  'Herald Banner empowers your phalanx',
+  Accord:  'Herald Banner — the phalanx parts and strikes through itself',
   Twins:   'Two royals; Rally action; Shatter',
   Veil:    'Essence-gated teleporting Wraith',
   Wild:    'Chancellor, siege engine, ambush predator',
@@ -25,8 +25,8 @@ export const ARMY_TAGLINES: Record<Army, string> = {
 export const ARMY_IDENTITIES: Record<Army, string> = {
   Crown:   'The benchmark army: standard chess. It owns the only true Queen, the only castling, and can always re-promote to Queen. No tricks — it wins by conventional pressure and is never structurally lost.',
   Phantom: 'A relentless hunter. The Shade never captures but Ghostwalks through pieces and gives piercing check — blocking is impossible, so the enemy King must run or someone must hunt the Shade down. Homing Thralls creep toward the enemy King to close the net.',
-  Accord:  'A phalanx built around its standard-bearer. Friendly Knights, Bishops, and Rooks inside the Herald’s 3×3 Banner gain a bonus king-step for everything they do. Devastating while the formation holds — and it collapses the moment the Herald falls.',
-  Twins:   'Two royal Warlords and the best action economy in the game: move, then optionally Rally one Warlord a free step. Shatter annihilates everything around a Warlord. Both must cross the midline to invade — and both must be kept safe.',
+  Accord:  'A phalanx built around its standard-bearer. Inside the Herald’s 3×3 Banner the formation parts for its own: Rooks and Bishops slide straight through friendly pieces, and Knights ride their leap again and again in a line. Devastating while the formation holds — and it collapses the moment the Herald falls.',
+  Twins:   'Two royal Warlords and the best action economy in the game: move, then optionally Rally one Warlord a free step. Shatter annihilates everything around a Warlord — sparing only royals, so paired Warlords can still detonate. Both must cross the midline to invade — and both must be kept safe.',
   Veil:    'A resource-gated assassin. The Wraith moves as a Queen or teleports anywhere, paying 1 Essence per capture — at 0 Essence it goes inert. Feed it by capturing enemy pawns with your minor pieces; its Wisps teleport to block and obstruct.',
   Wild:    'Unorthodox aggression at short range: the Apex leaps like a rook-knight, armored Behemoths rampage through whole files, Stalkers strike and slip back home, and Broncos trample even their own. Slow to develop, brutal up close.',
 };
@@ -103,10 +103,13 @@ const ARMY_PIECE_INFO: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
     P: 'Forward one (no double step); captures diagonally; or homes one step toward the enemy King. Promotes.',
   },
   Accord: {
-    Q: 'Steps one square, never captures. Friendly Knights, Bishops, and Rooks next to it are Empowered with a bonus king-step.',
+    Q: 'Steps one square, never captures. Friendly Rooks and Bishops next to it slide through friendly pieces; friendly Knights ride their leap in a line.',
+    R: 'Slides orthogonally. In the Herald’s Banner it slides straight through friendly pieces — enemies still block.',
+    B: 'Slides diagonally. In the Herald’s Banner it slides straight through friendly pieces — enemies still block.',
+    N: 'Knight jumps. In the Herald’s Banner it becomes a Nightrider: the leap repeats in a straight line, passing over friendly pieces.',
   },
   Twins: {
-    K: 'Royal. Steps one square; afterwards one Warlord may Rally a free step. Can Shatter everything adjacent. Both Warlords past the midline wins.',
+    K: 'Royal. Steps one square; afterwards one Warlord may Rally a free step. Can Shatter everything adjacent (royals are spared). Both Warlords past the midline wins.',
   },
   Veil: {
     Q: 'Moves as a Queen or teleports to any empty square. Captures cost 1 Essence; checks need ≥1 — at 0 Essence it is inert.',
@@ -342,7 +345,7 @@ export function extractCaptures(state: GameState, turn: Turn): Piece[] {
           const r = wr + dr, f = wf + df;
           if (r >= 0 && r < 8 && f >= 0 && f < 8) {
             const t = board[r * 8 + f];
-            if (t) captures.push(t);
+            if (t && t.slot !== 'K') captures.push(t); // royals are spared by Shatter
           }
         }
       }
