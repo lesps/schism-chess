@@ -64,7 +64,9 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 
 **Code:** `availablePromotions` skips the Q-slot check entirely for Twins, returning only from R/B/N.
 
-### Promoted piece dispatch — `promoted?: true` flag
+### Promoted piece dispatch — `promoted?: true` flag *(superseded in v2.3)*
+
+> **Superseded by Reinforcement Promotion (v2.3):** a promoted piece now IS its army's piece — the flag and every dispatch branch below were deleted. See the v2.3 section.
 
 **Ruling:** When a pawn promotes to R/B/N/Q, the resulting piece gains a `promoted: true` flag. Army generators and threat models check this flag to dispatch promoted pieces to standard FIDE behavior instead of army-specific behavior.
 
@@ -152,7 +154,9 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 
 ---
 
-## v2.2 Balance Pass
+## v2.2 Balance Pass *(Accord entries superseded in v2.3)*
+
+> **Superseded:** the phalanx slide and Nightrider were replaced wholesale by Concord + the March in v2.3. The two Accord rulings below are historical.
 
 ### Phalanx Nightrider path semantics
 
@@ -171,3 +175,52 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 **Ruling:** Shatter removes every adjacent piece **except K-slot pieces of either color**. Only a friendly Warlord can ever legally be adjacent (an enemy royal adjacent to a Warlord would already be in check on its own turn, which is illegal), so the both-colors formulation is a robustness choice with no reachable gameplay difference — it just guarantees Shatter can never delete a royal outright even in hand-built (`?sfen=`) positions.
 
 **Code:** K-slot filtering in `twins.ts` `applyShatterToBoard`, `apply.ts` shatter branch, and `src/ui/shared.ts` `extractCaptures` / `ShatterPreview`.
+
+---
+
+## v2.3 Parsimony Pass
+
+### Reinforcement Promotion — no `promoted` flag, no invisible state
+
+**Ruling:** A pawn promotes to its own army's piece for the chosen slot, and the resulting piece is **indistinguishable from an original** — same movement, threat, abilities, resource interactions, notation letter, and SFEN-X encoding. The `Piece.promoted` flag and every dispatch branch keyed on it were deleted.
+
+**Code:** `applyTurnUnchecked` creates `{ slot, color }` on promotion; `phantom.ts`/`veil.ts`/`wild.ts`/`accord.ts` have no promoted branches; `findShade`/`findHerald`/Behemoth Armor/rampage-wall checks match on slot alone.
+
+**Consequences settled by this ruling:**
+- The S8 wart "`promoted` is not serialized in SFEN-X" is resolved — there is nothing to serialize; SFEN-X round-trips are lossless again.
+- A promoted Wraith shares the army Essence pool and is Essence-gated like the original.
+- A promoted Herald re-establishes the Banner (Concord and the March resume).
+- A promoted Behemoth has Armor; a promoted Stalker exhausts; a promoted Bronco may capture friendlies.
+- Slot-cap counting (`availablePromotions`) is unchanged — all on-board pieces of a slot count, however they got there.
+- Crown Royal Abundance and the Twins closed Q-slot are unchanged.
+
+### Notation — `=Q` emission, `=^Q` legacy alias
+
+**Ruling:** Promotion SAN is plain `=Q/=R/=B/=N` (the letter is the slot, so it reads as the army's piece). The parser accepts the pre-v2.3 `=^Q` form as an alias so old game text remains readable — but replay under v2.3 semantics may diverge for games that contained promotions (the promoted piece now has army behavior). This break is accepted and noted in the changelog.
+
+**Code:** `turnToSan` emits `=${slot}`; all four `sanToTurn` promotion regexes use `=\^?([QRBN])`.
+
+### Concord scoping — N/B/R only; King and Herald excluded
+
+**Ruling:** The Concord pool is the set of slots among friendly **Knights, Bishops, and Rooks** inside the Banner. The King and the Herald neither contribute nor receive (a rook-sliding royal would warp invasion and check geometry; the keystone staying slow is the army's core tension). Pawns take no part. A lone piece's pool is its own slot — it gains nothing.
+
+**Code:** `concordPool` in `src/engine/accord.ts`; generator and threat give each in-Banner N/B/R the union of the pool's native movesets, with normal blocking.
+
+### March resolution — front-to-back column, deterministic
+
+**Rulings:**
+- The column steps **from the front**: marchers sorted by descending projection onto the march direction (square index as tiebreak; perpendicular marchers can never collide) each step iff their destination is currently empty. A blocked or off-board destination means the piece **holds**; nothing is ever captured.
+- The **Herald must step** or there is no march in that direction; a march in which no *other* piece steps is not generated (it would duplicate the plain Herald move).
+- A **pawn holds** rather than march onto the final rank (no promotion choice inside a multi-piece move).
+- A March **sets no en-passant target** and never changes castling rights; it **counts as a pawn move for the fifty-move clock iff at least one pawn stepped**.
+- The King marches with the Banner (this is the escort-invasion payoff); the end-state no-self-check rule applies to the whole march.
+
+**Code:** `computeMarch` in `src/engine/accord.ts` is the single source of truth, used by the generator, `apply.ts`, and the UI's `MarchPreview`. SAN: `Q>d5` (Herald destination).
+
+### No Executions — teleport-captures cannot target royals or Q-slot pieces
+
+**Ruling:** The Wraith's teleport-capture generation skips enemy pieces of slot `K` or `Q`, for every army (Queen, Shade, Herald, Apex, mirror Wraith; royals were already implicitly protected since movegen never produces king-captures). Queen-line Wraith captures of those pieces remain legal.
+
+**Interaction:** A Shade's piercing check can therefore no longer be answered by teleport-capturing the Shade — the Veil answers with a king move or a queen-line capture instead. The piercing-check rule text was updated accordingly; RULES.md §Phantom and §Veil cross-reference each other.
+
+**Code:** slot filter in `addWraithMoves` (`src/engine/veil.ts`); threat model untouched (teleport was never part of `attackedSquares`).

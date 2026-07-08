@@ -15,8 +15,9 @@ export const HINTS = {
   STALKER_EXHAUSTED: 'Stalker is Exhausted — it may move this turn, but not capture.',
   BEHEMOTH_ARMOR_DESC: 'Armor: enemies can only capture this Behemoth from inside the tinted 2-square zone.',
   RAMPAGE_DESC: 'the Behemoth clears every piece in its path, including your own.',
-  HERALD_BANNER_DESC: 'Banner zone — inside it your Rooks and Bishops slide through friendly pieces, and your Knights ride their leap in a line.',
-  EMPOWERED_DESC: 'Empowered by the Herald — the phalanx parts: slides pass through friendly pieces; Knights repeat their leap in a straight line.',
+  HERALD_BANNER_DESC: 'Banner zone — Knights, Bishops, and Rooks inside it move in Concord, each using the movement of any of them. The Herald can lead a March.',
+  EMPOWERED_DESC: 'In Concord — this piece may move as any Knight, Bishop, or Rook sharing the Banner with it.',
+  MARCH_CONFIRM: 'The whole formation steps one square with the Herald. Blocked pieces hold. No captures.',
   FRIENDLY_CAPTURE_CONFIRM: 'This captures your own piece. Continue?',
   SKIP_RALLY: 'Skip Rally',
   BACK: '← Back',
@@ -25,4 +26,5 @@ export const HINTS = {
   SHATTER: 'Shatter',
   RAMPAGE_CONFIRM_TITLE: 'Confirm Rampage',
   SHATTER_CONFIRM_TITLE: 'Confirm Shatter',
+  MARCH_CONFIRM_TITLE: 'Confirm March',
 } as const;

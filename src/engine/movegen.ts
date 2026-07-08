@@ -27,8 +27,9 @@ function countPiecesOfSlot(board: GameState['board'], color: Color, slot: Slot):
  * Twins — Q-slot permanently closed (d-file Warlord never dies); R/B/N replacement-only.
  * All others — replacement-only for all slots: Q cap=1, R/B/N cap=2.
  *
- * A slot is open if the current on-board count of pieces at that slot (army pieces AND
- * previously promoted pieces both count) is below the starting cap.
+ * A slot is open if the current on-board count of pieces at that slot is below the
+ * starting cap. Under Reinforcement Promotion (v2.3) promoted pieces ARE army pieces,
+ * so they count toward the cap like any other.
  */
 export function availablePromotions(state: GameState, color: Color): Slot[] {
   const army = color === 'W' ? state.armies.W : state.armies.B;

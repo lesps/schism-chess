@@ -172,12 +172,11 @@ interface PieceIconProps {
   slot: Slot;
   color: Color;
   army: Army;
-  promoted?: boolean;
 }
 
 /** Inline SVG piece image. Sized via font-size (1em × 1em); fill = currentColor. */
-export function PieceIcon({ slot, color, army, promoted }: PieceIconProps) {
-  const shape = (!promoted && ARMY_SHAPES[army]?.[slot]) || STANDARD[slot];
+export function PieceIcon({ slot, color, army }: PieceIconProps) {
+  const shape = ARMY_SHAPES[army]?.[slot] || STANDARD[slot];
   return (
     <svg
       className="piece-svg"

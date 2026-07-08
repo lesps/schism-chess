@@ -3,19 +3,6 @@ import type { ThreatModel } from './threat';
 import { getThreatModel, registerThreatModel } from './threat';
 import { registerGenerator, availablePromotions } from './movegen';
 
-// Tuning knob. 'phalanx' (RULES v2.2 default): the formation parts for its own —
-// Empowered Rooks/Bishops slide THROUGH friendly pieces (enemies still block), and
-// Empowered Knights become Nightriders (the leap repeats in a straight line, passing
-// over friendly-occupied landing squares). Legacy modes kept for tests/experiments:
-// 'king-step' adds a one-square move-or-capture bonus; 'queen' adds full Queen
-// sliding. Mutate via setAccordEmpowerment (e.g. in tests); production code should
-// rely on the default.
-export let ACCORD_EMPOWERMENT: 'phalanx' | 'king-step' | 'queen' = 'phalanx';
-
-export function setAccordEmpowerment(mode: 'phalanx' | 'king-step' | 'queen'): void {
-  ACCORD_EMPOWERMENT = mode;
-}
-
 const DIAGONALS = [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const;
 const ORTHOGONALS = [[-1, 0], [1, 0], [0, -1], [0, 1]] as const;
 const ALL_DIRS = [...DIAGONALS, ...ORTHOGONALS] as const;
@@ -27,12 +14,12 @@ function pushMove(turns: Turn[], from: Square, to: Square, promo?: Slot): void {
   turns.push({ primary: mv });
 }
 
-// Find the Herald square (Q-slot, non-promoted) for a given color, or null if captured.
-// A promoted FIDE Queen at Q-slot is not the Herald and does not define the Banner.
+// Find the Herald square (Q-slot) for a given color, or null if captured.
+// Under Reinforcement Promotion (v2.3) any Q-slot Accord piece IS the Herald.
 function findHerald(board: GameState['board'], color: Color): Square | null {
   for (let sq = 0; sq < 64; sq++) {
     const p = board[sq];
-    if (p && p.color === color && p.slot === 'Q' && !p.promoted) return sq;
+    if (p && p.color === color && p.slot === 'Q') return sq;
   }
   return null;
 }
@@ -51,6 +38,22 @@ export function bannerZone(board: GameState['board'], color: Color): Set<Square>
     }
   }
   return zone;
+}
+
+// Concord (RULES v2.3): friendly Knights, Bishops, and Rooks inside the Banner pool
+// their movement — each may move and capture using the native movement of any of them.
+// The pool is the set of N/B/R slots currently present in the Banner. A lone piece's
+// pool is just its own slot (it gains nothing). King, Herald, and pawns neither
+// contribute nor receive.
+export function concordPool(board: GameState['board'], color: Color): Set<Slot> {
+  const pool = new Set<Slot>();
+  for (const sq of bannerZone(board, color)) {
+    const p = board[sq];
+    if (p && p.color === color && (p.slot === 'N' || p.slot === 'B' || p.slot === 'R')) {
+      pool.add(p.slot);
+    }
+  }
+  return pool;
 }
 
 function slideTargets(
@@ -89,56 +92,6 @@ function knightTargets(board: GameState['board'], sq: Square, color: Color): Squ
   return result;
 }
 
-// Phalanx slide (Empowerment v2.2): friendly pieces never block — the formation
-// parts to let its own through. The slider may not LAND on a friendly square, but
-// it passes over them freely. Enemy pieces block as usual (landing = capture).
-function phalanxSlideTargets(
-  board: GameState['board'], sq: Square, color: Color,
-  dirs: readonly (readonly [number, number])[],
-): Square[] {
-  const rank = sq >> 3, file = sq & 7;
-  const result: Square[] = [];
-  for (const [dr, df] of dirs) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const target = r * 8 + f;
-      const tp = board[target];
-      if (tp) {
-        if (tp.color !== color) { result.push(target); break; } // capture, then stop
-        // friendly: not a landing square, but the ray continues through it
-      } else {
-        result.push(target);
-      }
-      r += dr; f += df;
-    }
-  }
-  return result;
-}
-
-// Phalanx Knight (Empowerment v2.2): a Nightrider through the formation — the
-// knight's leap repeats in a straight line. Empty and friendly-occupied landing
-// squares let the ride continue (friendly squares are not landable); the first
-// enemy piece is captured and ends the ride.
-function phalanxKnightTargets(board: GameState['board'], sq: Square, color: Color): Square[] {
-  const rank = sq >> 3, file = sq & 7;
-  const result: Square[] = [];
-  for (const [dr, df] of KNIGHT_DELTAS) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const target = r * 8 + f;
-      const tp = board[target];
-      if (tp) {
-        if (tp.color !== color) { result.push(target); break; } // capture, then stop
-        // friendly: ride continues over it
-      } else {
-        result.push(target);
-      }
-      r += dr; f += df;
-    }
-  }
-  return result;
-}
-
 // King-step candidates: one square any direction, move-or-capture (excludes own-piece squares).
 function kingStepTargets(board: GameState['board'], sq: Square, color: Color): Square[] {
   const rank = sq >> 3, file = sq & 7;
@@ -155,13 +108,6 @@ function kingStepTargets(board: GameState['board'], sq: Square, color: Color): S
     }
   }
   return result;
-}
-
-// Empowerment bonus targets for a piece at `sq`, given it stands in the Banner.
-function empoweredBonusTargets(board: GameState['board'], sq: Square, color: Color): Square[] {
-  return ACCORD_EMPOWERMENT === 'queen'
-    ? slideTargets(board, sq, color, ALL_DIRS)
-    : kingStepTargets(board, sq, color);
 }
 
 function addHeraldMoves(state: GameState, sq: Square, turns: Turn[]): void {
@@ -184,54 +130,84 @@ function addKingMoves(state: GameState, sq: Square, color: Color, turns: Turn[])
   }
 }
 
-function addEmpoweredSlideMoves(
-  state: GameState, sq: Square, color: Color,
-  dirs: readonly (readonly [number, number])[], empowered: boolean, turns: Turn[],
+// Movement for an N/B/R piece under Concord: the union of the native movesets of every
+// slot in its pool (its own slot alone when outside the Banner).
+function addConcordMoves(
+  state: GameState, sq: Square, color: Color, slot: Slot,
+  zone: Set<Square>, pool: Set<Slot>, turns: Turn[],
 ): void {
   const board = state.board;
-
-  // Phalanx mode REPLACES the native slide (its targets are a superset: the same
-  // rays, but friendly blockers are transparent).
-  if (empowered && ACCORD_EMPOWERMENT === 'phalanx') {
-    for (const t of phalanxSlideTargets(board, sq, color, dirs)) pushMove(turns, sq, t);
-    return;
-  }
-
-  const native = slideTargets(board, sq, color, dirs);
-  const seen = new Set<Square>(native);
-  for (const t of native) pushMove(turns, sq, t);
-
-  if (empowered) {
-    for (const t of empoweredBonusTargets(board, sq, color)) {
-      if (seen.has(t)) continue;
-      seen.add(t);
-      pushMove(turns, sq, t);
-    }
-  }
+  const slots = zone.has(sq) ? pool : new Set<Slot>([slot]);
+  const targets = new Set<Square>();
+  if (slots.has('R')) for (const t of slideTargets(board, sq, color, ORTHOGONALS)) targets.add(t);
+  if (slots.has('B')) for (const t of slideTargets(board, sq, color, DIAGONALS)) targets.add(t);
+  if (slots.has('N')) for (const t of knightTargets(board, sq, color)) targets.add(t);
+  for (const t of targets) pushMove(turns, sq, t);
 }
 
-function addEmpoweredKnightMoves(
-  state: GameState, sq: Square, color: Color, empowered: boolean, turns: Turn[],
-): void {
-  const board = state.board;
+// ---------------------------------------------------------------------------
+// The March (RULES v2.3)
+// ---------------------------------------------------------------------------
 
-  // Phalanx mode REPLACES the native knight move set (the Nightrider's first leap
-  // IS the native knight move, so this is a superset).
-  if (empowered && ACCORD_EMPOWERMENT === 'phalanx') {
-    for (const t of phalanxKnightTargets(board, sq, color)) pushMove(turns, sq, t);
-    return;
+export interface MarchStep {
+  from: Square;
+  to: Square;
+}
+
+// Compute the march in direction (dr, df) for `color`: the Herald and every friendly
+// piece inside the Banner step one square in that direction. The column steps from
+// the front (farthest along the direction first), so a piece may step into a square
+// a marcher ahead of it just vacated. A piece holds formation if its destination is
+// off-board or occupied, or if it is a pawn whose step would reach the final rank.
+// Returns the steps actually taken, or null if the Herald itself cannot step
+// (the Herald must lead — a march where it holds is no march at all).
+export function computeMarch(
+  board: GameState['board'], color: Color, dr: number, df: number,
+): MarchStep[] | null {
+  const heraldSq = findHerald(board, color);
+  if (heraldSq === null) return null;
+
+  const marchers: Square[] = [];
+  for (const sq of bannerZone(board, color)) {
+    const p = board[sq];
+    if (p && p.color === color) marchers.push(sq);
+  }
+  // Front of the column first: descending projection onto the march direction,
+  // square index as a deterministic tiebreak (perpendicular pieces never collide).
+  const proj = (sq: Square) => dr * (sq >> 3) + df * (sq & 7);
+  marchers.sort((a, b) => proj(b) - proj(a) || a - b);
+
+  const occ = new Set<Square>();
+  for (let i = 0; i < 64; i++) if (board[i]) occ.add(i);
+
+  const promoRank = color === 'W' ? 7 : 0;
+  const steps: MarchStep[] = [];
+  let heraldStepped = false;
+
+  for (const sq of marchers) {
+    const r = (sq >> 3) + dr, f = (sq & 7) + df;
+    if (r < 0 || r > 7 || f < 0 || f > 7) continue; // holds at the board edge
+    const dest = r * 8 + f;
+    if (occ.has(dest)) continue;                    // blocked — holds formation
+    if (board[sq]!.slot === 'P' && r === promoRank) continue; // pawns hold before the final rank
+    occ.delete(sq);
+    occ.add(dest);
+    steps.push({ from: sq, to: dest });
+    if (sq === heraldSq) heraldStepped = true;
   }
 
-  const native = knightTargets(board, sq, color);
-  const seen = new Set<Square>(native);
-  for (const t of native) pushMove(turns, sq, t);
+  return heraldStepped ? steps : null;
+}
 
-  if (empowered) {
-    for (const t of empoweredBonusTargets(board, sq, color)) {
-      if (seen.has(t)) continue;
-      seen.add(t);
-      pushMove(turns, sq, t);
-    }
+function addMarchTurns(state: GameState, color: Color, turns: Turn[]): void {
+  const heraldSq = findHerald(state.board, color);
+  if (heraldSq === null) return;
+  for (const [dr, df] of ALL_DIRS) {
+    const steps = computeMarch(state.board, color, dr, df);
+    // A march must move the Herald AND at least one other piece — otherwise it is
+    // just a Herald move, already generated as a standard move.
+    if (!steps || steps.length < 2) continue;
+    turns.push({ primary: { type: 'march', from: heraldSq, to: heraldSq + dr * 8 + df } });
   }
 }
 
@@ -278,6 +254,7 @@ function accordGenerator(state: GameState): Turn[] {
   const color = state.sideToMove;
   const board = state.board;
   const zone = bannerZone(board, color);
+  const pool = concordPool(board, color);
 
   for (let sq = 0; sq < 64; sq++) {
     const piece = board[sq];
@@ -285,20 +262,17 @@ function accordGenerator(state: GameState): Turn[] {
 
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
-      case 'Q':
-        if (piece.promoted) {
-          // Promoted FIDE Queen: full Queen sliding with captures; Banner-eligible
-          addEmpoweredSlideMoves(state, sq, color, ALL_DIRS, zone.has(sq), turns);
-        } else {
-          addHeraldMoves(state, sq, turns);
-        }
+      case 'Q': addHeraldMoves(state, sq, turns); break;
+      case 'R':
+      case 'B':
+      case 'N':
+        addConcordMoves(state, sq, color, piece.slot, zone, pool, turns);
         break;
-      case 'R': addEmpoweredSlideMoves(state, sq, color, ORTHOGONALS, zone.has(sq), turns); break;
-      case 'B': addEmpoweredSlideMoves(state, sq, color, DIAGONALS, zone.has(sq), turns); break;
-      case 'N': addEmpoweredKnightMoves(state, sq, color, zone.has(sq), turns); break;
       case 'P': addPawnMoves(state, sq, color, turns); break;
     }
   }
+
+  addMarchTurns(state, color, turns);
 
   return turns;
 }
@@ -333,50 +307,11 @@ function addKingStepAttacks(sq: Square, out: Set<Square>): void {
   }
 }
 
-function addEmpowermentAttacks(sq: Square, board: GameState['board'], out: Set<Square>): void {
-  if (ACCORD_EMPOWERMENT === 'queen') {
-    addSlideAttacks(sq, board, ALL_DIRS, out);
-  } else {
-    addKingStepAttacks(sq, out);
-  }
-}
-
-// Phalanx slide attacks: every square along the ray is attacked — friendly squares
-// are defended THROUGH (and the ray continues past them); the first enemy square is
-// attacked and ends the ray. Mirrors phalanxSlideTargets exactly, plus friendly
-// squares (defended).
-function addPhalanxSlideAttacks(
-  sq: Square, board: GameState['board'], color: Color,
-  dirs: readonly (readonly [number, number])[], out: Set<Square>,
-): void {
-  const rank = sq >> 3, file = sq & 7;
-  for (const [dr, df] of dirs) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const target = r * 8 + f;
-      out.add(target);
-      const tp = board[target];
-      if (tp && tp.color !== color) break; // enemy ends the ray; friendly is passed through
-      r += dr; f += df;
-    }
-  }
-}
-
-// Phalanx Knight (Nightrider) attacks: each landing square along the repeated leap,
-// continuing over empty and friendly squares, ending at the first enemy.
-function addPhalanxKnightAttacks(
-  sq: Square, board: GameState['board'], color: Color, out: Set<Square>,
-): void {
+function addKnightAttacks(sq: Square, out: Set<Square>): void {
   const rank = sq >> 3, file = sq & 7;
   for (const [dr, df] of KNIGHT_DELTAS) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const target = r * 8 + f;
-      out.add(target);
-      const tp = board[target];
-      if (tp && tp.color !== color) break;
-      r += dr; f += df;
-    }
+    const r = rank + dr, f = file + df;
+    if (r >= 0 && r <= 7 && f >= 0 && f <= 7) out.add(r * 8 + f);
   }
 }
 
@@ -384,6 +319,7 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
   const attacked = new Set<Square>();
   const board = state.board;
   const zone = bannerZone(board, byColor);
+  const pool = concordPool(board, byColor);
 
   for (let sq = 0; sq < 64; sq++) {
     const piece = board[sq];
@@ -392,16 +328,7 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
 
     switch (piece.slot) {
       case 'Q':
-        if (piece.promoted) {
-          // Promoted FIDE Queen: full sliding attacks; Banner-eligible
-          if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
-            addPhalanxSlideAttacks(sq, board, byColor, ALL_DIRS, attacked);
-          } else {
-            addSlideAttacks(sq, board, ALL_DIRS, attacked);
-            if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
-          }
-        }
-        // else: Herald cannot capture and contributes no threat.
+        // Herald cannot capture and contributes no threat.
         break;
       case 'P': {
         // Unified threat principle: blocked 7th-rank pawn → no diagonal threat.
@@ -415,34 +342,15 @@ function accordAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         }
         break;
       }
+      case 'R':
+      case 'B':
       case 'N': {
-        if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
-          addPhalanxKnightAttacks(sq, board, byColor, attacked);
-          break;
-        }
-        for (const [dr, df] of KNIGHT_DELTAS) {
-          const r = rank + dr, f = file + df;
-          if (r >= 0 && r <= 7 && f >= 0 && f <= 7) attacked.add(r * 8 + f);
-        }
-        if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
-        break;
-      }
-      case 'B': {
-        if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
-          addPhalanxSlideAttacks(sq, board, byColor, DIAGONALS, attacked);
-          break;
-        }
-        addSlideAttacks(sq, board, DIAGONALS, attacked);
-        if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
-        break;
-      }
-      case 'R': {
-        if (zone.has(sq) && ACCORD_EMPOWERMENT === 'phalanx') {
-          addPhalanxSlideAttacks(sq, board, byColor, ORTHOGONALS, attacked);
-          break;
-        }
-        addSlideAttacks(sq, board, ORTHOGONALS, attacked);
-        if (zone.has(sq)) addEmpowermentAttacks(sq, board, attacked);
+        // Concord threat mirrors Concord movement: the union of the pooled slots'
+        // native attacks (own slot only when outside the Banner).
+        const slots = zone.has(sq) ? pool : new Set<Slot>([piece.slot]);
+        if (slots.has('R')) addSlideAttacks(sq, board, ORTHOGONALS, attacked);
+        if (slots.has('B')) addSlideAttacks(sq, board, DIAGONALS, attacked);
+        if (slots.has('N')) addKnightAttacks(sq, attacked);
         break;
       }
       case 'K': {

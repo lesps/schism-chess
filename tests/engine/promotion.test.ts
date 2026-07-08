@@ -1,14 +1,15 @@
 /**
- * S8 promotion tests: per-army slot counting, blocked-pawn state,
- * Royal Abundance, Twins-Q-closed, and promoted-piece identity.
+ * Promotion tests (Reinforcement, RULES v2.3): per-army slot counting,
+ * blocked-pawn state, Royal Abundance, Twins-Q-closed, and promoted-piece
+ * identity — a promoted piece IS its army's piece for the slot.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   legalTurns, applyTurnUnchecked, gameStatus,
   algebraicToSquare, availablePromotions,
 } from '../../src/engine/index';
 import type { GameState, Piece, Slot, Color, Turn, StandardMove } from '../../src/engine/index';
-import { setAccordEmpowerment } from '../../src/engine/accord';
+import { bannerZone } from '../../src/engine/accord';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,8 +65,6 @@ function hasMove(turns: Turn[], from: string, to: string, promo?: Slot): boolean
       (promo !== undefined ? mv.promotion === promo : true);
   });
 }
-
-afterEach(() => { setAccordEmpowerment('king-step'); });
 
 // ---------------------------------------------------------------------------
 // Crown — Royal Abundance
@@ -224,8 +223,8 @@ describe('Veil: R-slot promotion (Wisp)', () => {
     expect(promos).toContain('R');
   });
 
-  it('promoted FIDE Rook slides orthogonally (no teleport)', () => {
-    // Build state after promotion: promoted Rook on g8
+  it('a promoted R-slot piece IS a Wisp: teleports, no slides, no captures (v2.3)', () => {
+    // Build state after promotion: promoted Wisp on g8
     const state = makeState('Veil', 'Crown', [
       { slot: 'K', color: 'W', at: 'e1' },
       { slot: 'Q', color: 'W', at: 'd1' }, // Wraith
@@ -236,7 +235,7 @@ describe('Veil: R-slot promotion (Wisp)', () => {
       { slot: 'K', color: 'B', at: 'a8' },
     ], 'W', { essence: { W: 2, B: 0 } });
 
-    // Promote pawn to R
+    // Promote pawn to R (= Wisp under Reinforcement)
     const afterPromo = applyTurnUnchecked(state, {
       primary: { type: 'standard', from: sq('g7'), to: sq('g8'), promotion: 'R' },
     });
@@ -246,21 +245,20 @@ describe('Veil: R-slot promotion (Wisp)', () => {
       primary: { type: 'standard', from: sq('a8'), to: sq('b8') },
     });
 
-    // White promoted Rook at g8: should generate sliding StandardMoves, no TeleportMoves
+    // White promoted Wisp at g8: teleports to empty squares only — no sliding, no captures
     const turns = legalTurns(afterBlack);
-    const rookTurns = turns.filter(t => {
+    const slidesFromG8 = turns.filter(t => {
       if (t.primary.type !== 'standard') return false;
-      const mv = t.primary as StandardMove;
-      return mv.from === sq('g8');
+      return (t.primary as StandardMove).from === sq('g8');
     });
-    expect(rookTurns.length).toBeGreaterThan(0);
+    expect(slidesFromG8.length).toBe(0);
 
-    // Must NOT generate teleport moves from g8 (it's a FIDE Rook, not a Wisp)
     const teleportFromG8 = turns.filter(t => {
       if (t.primary.type !== 'teleport') return false;
       return (t.primary as { from: number }).from === sq('g8');
     });
-    expect(teleportFromG8.length).toBe(0);
+    expect(teleportFromG8.length).toBeGreaterThan(0);
+    expect(teleportFromG8.every(t => (t.primary as { isCapture: boolean }).isCapture === false)).toBe(true);
   });
 });
 
@@ -299,9 +297,7 @@ describe('Wild: B-slot and N-slot promotions', () => {
     expect(promos).toContain('N');
   });
 
-  it('promoted FIDE Knight has no friendly-capture ability', () => {
-    // Wild Bronco can capture friendly pieces; a promoted FIDE Knight should not
-    // After promoting a Wild pawn to Knight, it should NOT capture its own King
+  it('a promoted N-slot piece IS a Bronco: friendly captures allowed, never the King (v2.3)', () => {
     const state = makeState('Wild', 'Crown', [
       { slot: 'K', color: 'W', at: 'e1' },
       { slot: 'Q', color: 'W', at: 'd1' },
@@ -309,9 +305,10 @@ describe('Wild: B-slot and N-slot promotions', () => {
       { slot: 'B', color: 'W', at: 'c1' }, { slot: 'B', color: 'W', at: 'f1' },
       { slot: 'N', color: 'W', at: 'g1' },  // one Bronco alive
       { slot: 'P', color: 'W', at: 'g7' },
+      { slot: 'P', color: 'W', at: 'f6' },  // friendly piece on the new Bronco's jump square
       { slot: 'K', color: 'B', at: 'a8' },
     ]);
-    // Promote pawn to N
+    // Promote pawn to N (= Bronco under Reinforcement)
     const afterPromo = applyTurnUnchecked(state, {
       primary: { type: 'standard', from: sq('g7'), to: sq('g8'), promotion: 'N' },
     });
@@ -319,50 +316,116 @@ describe('Wild: B-slot and N-slot promotions', () => {
     const afterBlack = applyTurnUnchecked(afterPromo, {
       primary: { type: 'standard', from: sq('a8'), to: sq('b8') },
     });
-    // The promoted Knight is at g8. It should not capture friendly pieces.
+    // The promoted Bronco at g8 may capture the friendly pawn on f6 (g8→f6 is a knight jump).
     const turns = legalTurns(afterBlack);
-    const knightCapFriendly = turns.some(t => {
+    const friendlyCapture = turns.some(t => {
       if (t.primary.type !== 'standard') return false;
       const mv = t.primary as StandardMove;
-      if (mv.from !== sq('g8')) return false;
-      const targetPiece = afterBlack.board[mv.to];
-      return targetPiece !== null && targetPiece.color === 'W';
+      return mv.from === sq('g8') && mv.to === sq('f6');
     });
-    expect(knightCapFriendly).toBe(false);
+    expect(friendlyCapture).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Accord — Rook promotion + Banner eligibility
+// Accord — Reinforcement: a promoted Q-slot piece IS the Herald
 // ---------------------------------------------------------------------------
-describe('Accord: promoted Rook is Banner-eligible', () => {
-  it('promoted FIDE Rook inside Banner gets empowerment (king-step)', () => {
-    // Herald at e2 (Banner covers d1..f3 zone). Promoted Rook placed at e3 (in Banner zone).
-    // The Rook should have king-step bonus moves in addition to orthogonal slides.
+describe('Accord: Reinforcement restores the Herald and joins Concord', () => {
+  it('promoting to Q re-establishes the Banner (the promoted piece IS the Herald)', () => {
+    // Herald dead (Q-slot open); pawn on d7 promotes to Q on d8.
     const state = makeState('Accord', 'Crown', [
       { slot: 'K', color: 'W', at: 'a1' },
-      { slot: 'Q', color: 'W', at: 'e2' }, // Herald
-      // No original Rooks → R-slot open; promoted Rook at e3 (simulate post-promotion)
-      { slot: 'R', color: 'W', at: 'e3' }, // this is the promoted FIDE Rook
-      { slot: 'K', color: 'B', at: 'h8' },
+      { slot: 'P', color: 'W', at: 'd7' },
+      { slot: 'K', color: 'B', at: 'h1' },
     ]);
-
+    expect(bannerZone(state.board, 'W').size).toBe(0); // no Herald, no Banner
     const turns = legalTurns(state);
-    // Rook at e3 with Banner from Herald at e2: Banner zone is d1..f3 (3×3 around e2)
-    // e3 is in the zone → Empowered: gets king-step bonus in addition to orthogonal slides
-    // King-step bonus: can move one square diagonally → d2, f2, d4, f4
+    expect(hasMove(turns, 'd7', 'd8', 'Q')).toBe(true);
+    const after = applyTurnUnchecked(state, {
+      primary: { type: 'standard', from: sq('d7'), to: sq('d8'), promotion: 'Q' },
+    });
+    const zone = bannerZone(after.board, 'W');
+    expect(zone.has(sq('d8'))).toBe(true); // Banner re-established around the new Herald
+    expect(zone.size).toBe(6); // edge-clipped 3×3
+  });
+
+  it('a promoted R-slot piece joins Concord like any Rook', () => {
+    // Herald e8; promoted Rook d8 (in zone); Bishop e7 (in zone) → the Rook gains diagonals.
+    const state = makeState('Accord', 'Crown', [
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'e8' }, // Herald
+      { slot: 'R', color: 'W', at: 'd8' }, // promoted (indistinguishable — that's the point)
+      { slot: 'B', color: 'W', at: 'e7' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const turns = legalTurns(state);
     const rTurns = turns.filter(t => {
       if (t.primary.type !== 'standard') return false;
-      return (t.primary as StandardMove).from === sq('e3');
+      return (t.primary as StandardMove).from === sq('d8');
     });
+    expect(rTurns.some(t => (t.primary as StandardMove).to === sq('d5'))).toBe(true); // native slide
+    expect(rTurns.some(t => (t.primary as StandardMove).to === sq('a5'))).toBe(true); // pooled diagonal (d8→a5)
+  });
+});
 
-    // Native Rook moves include orthogonal slides from e3
-    const hasOrthogonal = rTurns.some(t => (t.primary as StandardMove).to === sq('e4'));
-    expect(hasOrthogonal).toBe(true);
+// ---------------------------------------------------------------------------
+// Reinforcement identity: promoted Q-slot pieces are the army piece
+// ---------------------------------------------------------------------------
+describe('Reinforcement identity (v2.3)', () => {
+  it('a promoted Phantom Q-slot piece IS the Shade: ghostwalks, cannot capture', () => {
+    // Shade dead; promoted Shade at d8 with a friendly pawn in its path and an enemy beyond.
+    const state = makeState('Phantom', 'Crown', [
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'd8' }, // promoted via Reinforcement — just a Shade
+      { slot: 'P', color: 'W', at: 'd6' },
+      { slot: 'N', color: 'B', at: 'd4' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ]);
+    const turns = legalTurns(state);
+    // Ghostwalk: passes through d6 (friendly) AND d4 (enemy), landing on empty squares
+    expect(hasMove(turns, 'd8', 'd5')).toBe(true); // through the friendly pawn
+    expect(hasMove(turns, 'd8', 'd3')).toBe(true); // through the enemy knight too
+    expect(hasMove(turns, 'd8', 'd4')).toBe(false); // cannot capture
+  });
 
-    // Empowerment adds king-step (one square any direction including diagonals)
-    const hasDiagonalStep = rTurns.some(t => (t.primary as StandardMove).to === sq('d4'));
-    expect(hasDiagonalStep).toBe(true); // d4 = e3 + (-1,+1) king-step diagonal
+  it('a promoted Veil Q-slot piece IS the Wraith: Essence-gated captures', () => {
+    // Wraith dead; promoted Wraith at d8; enemy pawn at d4; Essence 0 → no captures, no check.
+    const state = makeState('Veil', 'Crown', [
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'd8' }, // promoted Wraith
+      { slot: 'P', color: 'B', at: 'd4' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ], 'W', { essence: { W: 0, B: 0 } });
+    const turns = legalTurns(state);
+    expect(hasMove(turns, 'd8', 'd4')).toBe(false); // inert at 0 Essence
+
+    const fueled = makeState('Veil', 'Crown', [
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'Q', color: 'W', at: 'd8' },
+      { slot: 'P', color: 'B', at: 'd4' },
+      { slot: 'K', color: 'B', at: 'h1' },
+    ], 'W', { essence: { W: 1, B: 0 } });
+    expect(hasMove(legalTurns(fueled), 'd8', 'd4')).toBe(true); // capture at ≥1 Essence
+
+    // And the capture SPENDS Essence (the promoted piece is not a free FIDE Queen)
+    const after = applyTurnUnchecked(fueled, {
+      primary: { type: 'standard', from: sq('d8'), to: sq('d4') },
+    });
+    expect(after.essence.W).toBe(0);
+  });
+
+  it('a promoted Wild R-slot piece IS a Behemoth: Armor applies', () => {
+    // Promoted Behemoth at d8; enemy Crown Rook far away on d1 cannot capture it
+    // (outside Chebyshev 2), but an adjacent piece can.
+    const state = makeState('Crown', 'Wild', [
+      { slot: 'K', color: 'W', at: 'a1' },
+      { slot: 'R', color: 'W', at: 'd1' },
+      { slot: 'K', color: 'B', at: 'h8' },
+      { slot: 'R', color: 'B', at: 'd6' }, // promoted Behemoth (Black is Wild)
+    ]);
+    const turns = legalTurns(state);
+    expect(hasMove(turns, 'd1', 'd6')).toBe(false); // Armor: too far to capture
+    expect(hasMove(turns, 'd1', 'd5')).toBe(true);  // approach is fine
   });
 });
 

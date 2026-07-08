@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { Army, Color, RampageMove, Square, Turn } from '../../engine/types';
+import type { Army, Color, MarchMove, RampageMove, Square, Turn } from '../../engine/types';
 import { applyTurnUnchecked } from '../../engine';
-import { bannerZone } from '../../engine/accord';
+import { bannerZone, concordPool } from '../../engine/accord';
 import { ArmyInfoSheet } from '../components/ArmyInfoSheet';
 import { Board } from '../components/Board';
 import type { OverlayKind } from '../components/Board';
@@ -9,6 +9,7 @@ import { CapturedPieceTray } from '../components/CapturedPieceTray';
 import { EssenceMeter } from '../components/EssenceMeter';
 import { GameEndModal } from '../components/GameEndModal';
 import { HintBar } from '../components/HintBar';
+import { MarchPreview } from '../components/MarchPreview';
 import { MoveListPanel } from '../components/MoveListPanel';
 import { RampagePreview } from '../components/RampagePreview';
 import { SanInput } from '../components/SanInput';
@@ -77,6 +78,9 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   // ── Rampage preview ──
   const [rampagePreviewTurn, setRampagePreviewTurn] = useState<(Turn & { primary: RampageMove }) | null>(null);
 
+  // ── March preview ──
+  const [marchPreviewTurn, setMarchPreviewTurn] = useState<(Turn & { primary: MarchMove }) | null>(null);
+
   // ── Army info sheet ──
   const [armyInfoOpen, setArmyInfoOpen] = useState(false);
 
@@ -137,7 +141,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   const armorSquares = useMemo((): Map<Square, OverlayKind> => {
     if (selectedSquare === null) return new Map();
     const piece = gameState.board[selectedSquare];
-    if (!piece || piece.slot !== 'R' || piece.promoted) return new Map();
+    if (!piece || piece.slot !== 'R') return new Map();
     if (armies[piece.color] !== 'Wild') return new Map();
     const map = new Map<Square, OverlayKind>();
     for (const sq of armorZone(selectedSquare)) map.set(sq, 'armor');
@@ -161,19 +165,18 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     return map;
   }, [bannerSquares, rallyFromSquares, armorSquares, blastSquares]);
 
-  // Accord: Empowered piece squares (friendly non-pawn/herald in banner zone)
+  // Accord: pieces in Concord (N/B/R in the Banner, when the pool actually grants
+  // something — i.e. at least two distinct slots share the zone)
   const empoweredSquares = useMemo((): Set<Square> => {
     const result = new Set<Square>();
     for (const color of ['W', 'B'] as const) {
       if (armies[color] !== 'Accord') continue;
-      const zone = bannerZone(displayState.board, color);
-      for (const sq of zone) {
+      const pool = concordPool(displayState.board, color);
+      if (pool.size < 2) continue; // a lone piece gains nothing
+      for (const sq of bannerZone(displayState.board, color)) {
         const piece = displayState.board[sq];
         if (!piece || piece.color !== color) continue;
-        // Pawns are never empowered; Herald (Q-slot, non-promoted) is the anchor, not empowered itself
-        if (piece.slot === 'P') continue;
-        if (piece.slot === 'Q' && !piece.promoted) continue;
-        result.add(sq);
+        if (piece.slot === 'N' || piece.slot === 'B' || piece.slot === 'R') result.add(sq);
       }
     }
     return result;
@@ -270,6 +273,15 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         // Rampage: always single turn per from→to; show preview
         if (first.primary.type === 'rampage') {
           setRampagePreviewTurn(first as Turn & { primary: RampageMove });
+          setSelectedSquare(null);
+          return;
+        }
+
+        // March as the only option (Herald plain move filtered out elsewhere):
+        // route through the confirmation preview. The common case — Herald step
+        // and March sharing a destination — falls through to the chooser below.
+        if (destTurns.length === 1 && first.primary.type === 'march') {
+          setMarchPreviewTurn(first as Turn & { primary: MarchMove });
           setSelectedSquare(null);
           return;
         }
@@ -403,7 +415,6 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
       {/* Selected-piece reminder (shown for any tapped piece, even without moves) */}
       {selectedPiece && twinsStagingTurns === null && (() => {
         const pArmy = armies[selectedPiece.color];
-        const promoted = selectedPiece.promoted ?? false;
         const note = selectedPiece.color !== sideToMove
           ? HINTS.INSPECT_WAITING
           : (legalMovesForSelected.length === 0 ? HINTS.NO_LEGAL_MOVES : null);
@@ -414,16 +425,15 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
               style={{ color: PIECE_COLORS[pArmy][selectedPiece.color] }}
               aria-hidden
             >
-              <PieceIcon slot={selectedPiece.slot} color={selectedPiece.color} army={pArmy} promoted={promoted} />
+              <PieceIcon slot={selectedPiece.slot} color={selectedPiece.color} army={pArmy} />
             </span>
             <span className="piece-info-text">
               <strong className="piece-info-name" style={{ color: ARMY_ACCENTS[pArmy] }}>
-                {getSlotName(selectedPiece.slot, pArmy, promoted)}
-                {promoted ? ' (promoted)' : ''}
+                {getSlotName(selectedPiece.slot, pArmy)}
                 {note && <span className="piece-info-note"> · {note}</span>}
               </strong>
               <span className="piece-info-desc">
-                {getPieceInfo(selectedPiece.slot, pArmy, promoted)}
+                {getPieceInfo(selectedPiece.slot, pArmy)}
               </span>
             </span>
           </div>
@@ -540,15 +550,33 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         />
       )}
 
+      {/* March preview */}
+      {marchPreviewTurn !== null && (
+        <MarchPreview
+          turn={marchPreviewTurn}
+          gameState={gameState}
+          onConfirm={() => {
+            submitTurn(marchPreviewTurn);
+            setMarchPreviewTurn(null);
+          }}
+          onCancel={() => setMarchPreviewTurn(null)}
+        />
+      )}
+
       {/* Chooser sheet */}
       {chooserTurns && (
         <TurnChooser
           turns={chooserTurns}
           gameState={gameState}
           onSelect={turn => {
-            // If selected from chooser is a rampage, show preview first
+            // If selected from chooser is a rampage or march, show preview first
             if (turn.primary.type === 'rampage') {
               setRampagePreviewTurn(turn as Turn & { primary: RampageMove });
+              setChooserTurns(null);
+              return;
+            }
+            if (turn.primary.type === 'march') {
+              setMarchPreviewTurn(turn as Turn & { primary: MarchMove });
               setChooserTurns(null);
               return;
             }

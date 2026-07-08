@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { GameState, Turn } from '../../engine/types';
-import { PIECE_COLORS } from '../shared';
+import { PIECE_COLORS, getSlotName } from '../shared';
 import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
 import { turnToSan } from '../../engine';
@@ -69,18 +69,22 @@ function describeOption(turn: Turn, state: GameState): OptionDesc {
   const army = armies[sideToMove];
   const p = turn.primary;
 
-  // Promotion
+  // Promotion (Reinforcement, v2.3): the promoted piece is the army's own piece
   if (p.type === 'standard' && p.promotion) {
     const slot = p.promotion;
-    const glyph = <PieceIcon slot={slot} color={sideToMove} army={army} promoted />;
+    const glyph = <PieceIcon slot={slot} color={sideToMove} army={army} />;
     const color = PIECE_COLORS[army][sideToMove];
-    const slotNames: Record<typeof slot, string> = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', K: 'King', P: 'Pawn' };
-    return { label: `Promote to ${slotNames[slot]}`, glyph, glyphColor: color, desc: null };
+    return { label: `Promote to ${getSlotName(slot, army)}`, glyph, glyphColor: color, desc: null };
   }
 
   // Shatter
   if (p.type === 'shatter') {
     return { label: 'Shatter', glyph: '💥', glyphColor: null, desc: 'Destroys every piece around this Warlord — friend and foe' };
+  }
+
+  // March (Accord v2.3): the Herald leads the whole Banner one step
+  if (p.type === 'march') {
+    return { label: 'March', glyph: '🚩', glyphColor: null, desc: HINTS.MARCH_CONFIRM };
   }
 
   // Friendly capture (Wild Bronco/Behemoth taking its own piece) — warn clearly

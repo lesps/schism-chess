@@ -27,7 +27,7 @@ export function CapturedPieceTray({ captured, armies }: Props) {
                 style={{ color: PIECE_COLORS[army][color] }}
                 aria-hidden
               >
-                <PieceIcon slot={p.slot} color={p.color} army={army} promoted={p.promoted} />
+                <PieceIcon slot={p.slot} color={p.color} army={army} />
               </span>
             ))}
           </div>

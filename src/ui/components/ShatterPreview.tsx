@@ -34,7 +34,7 @@ export function ShatterPreview({ warlordSquare, gameState, onConfirm, onCancel }
             {doomed.map(({ sq, piece }) => {
               const isFriendly = piece!.color === sideToMove;
               const army = armies[piece!.color];
-              const glyph = <PieceIcon slot={piece!.slot} color={piece!.color} army={army} promoted={piece!.promoted} />;
+              const glyph = <PieceIcon slot={piece!.slot} color={piece!.color} army={army} />;
               const color = PIECE_COLORS[army][piece!.color];
               return (
                 <li

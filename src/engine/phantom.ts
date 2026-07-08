@@ -181,13 +181,8 @@ function phantomGenerator(state: GameState): Turn[] {
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
       case 'Q':
-        if (piece.promoted) {
-          // Promoted FIDE Queen: normal sliding, captures normally
-          addSlidingMoves(board, sq, color, ALL_DIRS, true, turns);
-        } else {
-          // Shade: Ghostwalks through pieces, never captures
-          addGhostwalkMoves(board, sq, turns);
-        }
+        // Shade: Ghostwalks through pieces, never captures
+        addGhostwalkMoves(board, sq, turns);
         break;
       case 'R': addSlidingMoves(board, sq, color, ORTHO, true, turns); break;
       case 'B': addSlidingMoves(board, sq, color, DIAGS, true, turns); break;
@@ -218,11 +213,12 @@ function shadeHasLOS(board: GameState['board'], shadeSq: Square, targetSq: Squar
   return true;
 }
 
-// Find the Shade square (Q-slot, non-promoted) for a given color, or null if captured.
+// Find the Shade square (Q-slot) for a given color, or null if captured.
+// Under Reinforcement Promotion (v2.3) any Q-slot Phantom piece IS the Shade.
 function findShade(board: GameState['board'], color: Color): Square | null {
   for (let sq = 0; sq < 64; sq++) {
     const p = board[sq];
-    if (p && p.color === color && p.slot === 'Q' && !p.promoted) return sq;
+    if (p && p.color === color && p.slot === 'Q') return sq;
   }
   return null;
 }

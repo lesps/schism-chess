@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.0 — 2026-07-08
+
+**v1.2.0 — Parsimony pass, fun first (rules v2.3)**
+
+A pass over the two rules players found most confusing — promotion and the Accord's Nightrider — plus the hole they opened together. Three rules changed.
+
+### Promotion — Reinforcement (all armies)
+- A pawn now promotes to **its own army's piece** for any open slot, abilities and all (`e8=Q` for Veil is a new Wraith; an Accord pawn can restore a fallen Herald). Replacement-only caps, Royal Abundance, and the blocked-pawn rule unchanged.
+- Deletes the FIDE-only clause, the slot table, the "no army abilities" clause — and the engine's `Piece.promoted` flag with every dispatch branch keyed on it (all five army modules). The flag was the game's only invisible state and was never serialized in SFEN-X; that round-trip wart is gone at the root.
+- Notation simplifies to plain `e8=Q`; the old `e8=^Q` form is still parsed as a legacy alias. **Breaking:** saved games/PBM payloads recorded under v2.2 that contain promotions may no longer replay identically (the promoted piece now has army behavior).
+
+### Accord — Concord + the March (replaces phalanx Empowerment and the Nightrider)
+- **Concord:** Knights, Bishops, and Rooks inside the Banner pool their movement — each may move and capture as any of them (R+B in the Banner are both Queens; add an N and all three also leap). Normal blocking; threat mirrors movement; a lone piece in the Banner gains nothing — the power exists only as a formation.
+- **The March:** the Herald steps one square to an empty square and **every friendly piece in the Banner steps with it** in the same direction — the column steps from the front, blocked pieces hold, nothing is captured, pawns hold before the final rank, and the King marches too (the escort-invasion payoff). SAN: `Q>d5`. New `MarchMove` primary action; `computeMarch` in `accord.ts` is the single source of truth for generator, apply, and UI preview.
+- The v2.2 slide-through-friendlies and the Nightrider are removed, along with the `ACCORD_EMPOWERMENT` flag and its legacy modes.
+
+### Veil — No Executions
+- The Wraith's **teleport-capture may not target a royal or any Queen-slot piece** (Queen, Shade, Herald, Apex, enemy Wraith). Queen-line captures stay legal. Closes the turn-one global decapitation of the Herald (and the equivalent snipe of every army's keystone). Knock-on: a Shade's piercing check can no longer be answered by teleport-capturing the Shade.
+
+### UI
+- Promotion chooser shows the army's own piece names and art ("Promote to Wraith"); the promoted-fallback piece art and "(promoted)" labels are gone.
+- New `MarchPreview` confirmation sheet (lists the column's steps); tapping the Herald onto an empty square offers "Move" vs "March" via the existing chooser; the Concord badge appears only when the pool actually grants something (≥2 distinct slots in the Banner).
+- Accord strings rewritten across the hint bar, army info sheet, and move reminders.
+
 ## 1.1.0 — 2026-07-06
 
 **v1.1.0 — Balance pass, fun first (rules v2.2)**

@@ -1,5 +1,5 @@
 import type {
-  Army, Color, GameState, Piece, RampageMove, Shatter, Slot, Square,
+  Army, Color, GameState, MarchMove, Piece, RampageMove, Shatter, Slot, Square,
   StandardMove, StrikeMove, TeleportMove, Turn, RallyStep, PrimaryAction,
 } from './types';
 import { legalTurns } from './legality';
@@ -78,7 +78,7 @@ function boardAfterPrimary(state: GameState, primary: PrimaryAction): (Piece | n
   if (primary.type === 'standard') {
     const mv = primary as StandardMove;
     const piece = b[mv.from]!;
-    b[mv.to] = mv.promotion ? { slot: mv.promotion, color: piece.color, promoted: true } : piece;
+    b[mv.to] = mv.promotion ? { slot: mv.promotion, color: piece.color } : piece;
     b[mv.from] = null;
     if (piece.slot === 'P' && mv.to === state.enPassantTarget && (mv.from & 7) !== (mv.to & 7)) {
       b[color === 'W' ? mv.to - 8 : mv.to + 8] = null;
@@ -260,6 +260,13 @@ export function turnToSan(stateBefore: GameState, turn: Turn): string {
     return `K@${squareToAlgebraic(sh.warlordSquare)}${rallyStr(mid)}${suffix}`;
   }
 
+  // ── March (Accord v2.3) ────────────────────────────────────────────────
+  // 'Q>' + the Herald's destination; the column's steps are derived from the board.
+  if (primary.type === 'march') {
+    const mm = primary as MarchMove;
+    return `Q>${squareToAlgebraic(mm.to)}${suffix}`;
+  }
+
   // ── Standard move ──────────────────────────────────────────────────────
   if (primary.type === 'standard') {
     const mv = primary as StandardMove;
@@ -283,7 +290,7 @@ export function turnToSan(stateBefore: GameState, turn: Turn): string {
       } else {
         san = squareToAlgebraic(mv.to);
       }
-      if (mv.promotion) san += `=^${mv.promotion}`;
+      if (mv.promotion) san += `=${mv.promotion}`;
     } else {
       const dis = computeDisambiguator(stateBefore, piece.slot, mv.from, mv.to, isCapture);
       san = `${piece.slot}${dis}${isCapture ? 'x' : ''}${squareToAlgebraic(mv.to)}`;
@@ -419,8 +426,21 @@ export function sanToTurn(state: GameState, san: string): Turn | ParseError {
     return matches[0];
   }
 
-  // ── Non-standard pawn move (Thrall homing): P[a-h]?[1-8]?[a-h][1-8](=^[QRBN])? ──
-  const pawnHomingM = s.match(/^P([a-h])?([1-8])?([a-h][1-8])(=\^([QRBN]))?$/);
+  // ── March (Accord v2.3): Q>[a-h][1-8] ─────────────────────────────────
+  const marchM = s.match(/^Q>([a-h][1-8])$/);
+  if (marchM) {
+    const to = algebraicToSquare(marchM[1]);
+    const matches = legal.filter(t => {
+      if (t.primary.type !== 'march') return false;
+      return (t.primary as MarchMove).to === to && matchRally(t.rally, rallyInfo);
+    });
+    if (matches.length === 0) return { error: `Illegal March: ${san}` };
+    return matches[0];
+  }
+
+  // ── Non-standard pawn move (Thrall homing): P[a-h]?[1-8]?[a-h][1-8](=[QRBN])? ──
+  // ('=^Q' is accepted as a legacy pre-v2.3 alias for '=Q' in all promotion forms.)
+  const pawnHomingM = s.match(/^P([a-h])?([1-8])?([a-h][1-8])(=\^?([QRBN]))?$/);
   if (pawnHomingM) {
     const dfChar = pawnHomingM[1];
     const drChar = pawnHomingM[2];
@@ -453,8 +473,8 @@ export function sanToTurn(state: GameState, san: string): Turn | ParseError {
     return matches[0];
   }
 
-  // ── Pawn push: [a-h][1-8] or [a-h][1-8]=^[QRBN] ───────────────────────
-  const pawnPushM = s.match(/^([a-h])([1-8])(=\^([QRBN]))?$/);
+  // ── Pawn push: [a-h][1-8] or [a-h][1-8]=[QRBN] ────────────────────────
+  const pawnPushM = s.match(/^([a-h])([1-8])(=\^?([QRBN]))?$/);
   if (pawnPushM) {
     const to = algebraicToSquare(pawnPushM[1] + pawnPushM[2]);
     const promo = pawnPushM[4] as Slot | undefined;
@@ -475,8 +495,8 @@ export function sanToTurn(state: GameState, san: string): Turn | ParseError {
     return matches[0];
   }
 
-  // ── Pawn capture: [a-h]x[a-h][1-8] or with =^[QRBN] ───────────────────
-  const pawnCapM = s.match(/^([a-h])x([a-h][1-8])(=\^([QRBN]))?$/);
+  // ── Pawn capture: [a-h]x[a-h][1-8] or with =[QRBN] ────────────────────
+  const pawnCapM = s.match(/^([a-h])x([a-h][1-8])(=\^?([QRBN]))?$/);
   if (pawnCapM) {
     const fromFile = pawnCapM[1].charCodeAt(0) - 97;
     const to = algebraicToSquare(pawnCapM[2]);
@@ -498,8 +518,8 @@ export function sanToTurn(state: GameState, san: string): Turn | ParseError {
   }
 
   // ── Piece move ──────────────────────────────────────────────────────────
-  // [KQRBN] [a-h]? [1-8]? x? [a-h][1-8] (=^[QRBN])?
-  const pieceM = s.match(/^([KQRBN])([a-h])?([1-8])?(x)?([a-h][1-8])(=\^([QRBN]))?$/);
+  // [KQRBN] [a-h]? [1-8]? x? [a-h][1-8] (=[QRBN])?
+  const pieceM = s.match(/^([KQRBN])([a-h])?([1-8])?(x)?([a-h][1-8])(=\^?([QRBN]))?$/);
   if (pieceM) {
     const slot = pieceM[1] as Slot;
     const dfChar = pieceM[2];

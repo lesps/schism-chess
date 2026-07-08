@@ -155,6 +155,7 @@ function getLastFrom(primary: Turn['primary']): Square | null {
     case 'shatter':  return primary.warlordSquare;
     case 'rampage':  return primary.from;
     case 'strike':   return primary.from;
+    case 'march':    return primary.from;
   }
 }
 
@@ -165,6 +166,7 @@ function getLastTo(primary: Turn['primary']): Square | null {
     case 'shatter':  return null;
     case 'rampage':  return primary.to;
     case 'strike':   return primary.target;
+    case 'march':    return primary.to;
   }
 }
 
@@ -181,7 +183,7 @@ function squareLabel(
   if (!piece) return coord;
   const p = piece as NonNullable<GameState['board'][number]>;
   const army = armies[p.color];
-  const name = getSlotName(p.slot, army, p.promoted ?? false);
+  const name = getSlotName(p.slot, army);
   const status = empowered ? ' — Empowered' : exhausted ? ' — Exhausted' : '';
   return `${coord}: ${p.color === 'W' ? 'White' : 'Black'} ${name}${status}`;
 }

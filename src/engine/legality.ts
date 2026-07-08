@@ -1,4 +1,4 @@
-import type { GameState, Turn, StandardMove, TeleportMove, Shatter, RampageMove, StrikeMove } from './types';
+import type { GameState, Turn, StandardMove, TeleportMove, Shatter, RampageMove, StrikeMove, MarchMove } from './types';
 import { getThreatModel } from './threat';
 import { getGenerator } from './movegen';
 import { applyTurnUnchecked } from './apply';
@@ -134,6 +134,11 @@ export function applyTurn(state: GameState, turn: Turn): GameState {
     if (tp.type === 'strike' && primary.type === 'strike') {
       return (tp as StrikeMove).from === (primary as StrikeMove).from &&
         (tp as StrikeMove).target === (primary as StrikeMove).target;
+    }
+    if (tp.type === 'march' && primary.type === 'march') {
+      // (from, to) uniquely identifies the march: the column's steps are derived
+      return (tp as MarchMove).from === (primary as MarchMove).from &&
+        (tp as MarchMove).to === (primary as MarchMove).to;
     }
     return false;
   });

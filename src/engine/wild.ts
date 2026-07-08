@@ -102,7 +102,7 @@ function addBehemothMoves(state: GameState, from: Square, color: Color, turns: T
       if (p.color === color && p.slot === 'K') { illegal = true; break; }
 
       // Enemy armored Behemoth (wall ruling): stop BEFORE this square
-      if (p.color !== color && p.slot === 'R' && !p.promoted && RAMPAGE_VS_ARMOR === 'wall' && chebyshev(from, sq) > 2) {
+      if (p.color !== color && p.slot === 'R' && RAMPAGE_VS_ARMOR === 'wall' && chebyshev(from, sq) > 2) {
         if (i === firstPieceIdx) {
           // The very first capture-entry is a wall — no valid rampage
           illegal = true;
@@ -161,74 +161,6 @@ function addBroncoMoves(state: GameState, from: Square, color: Color, turns: Tur
     const to = r * 8 + f;
     const tp = board[to];
     if (tp && tp.color === color && tp.slot === 'K') continue; // never capture own royal
-    pushStd(turns, from, to);
-  }
-}
-
-// FIDE move helpers for promoted pieces (no army-specific abilities).
-function addFideQueenMoves(state: GameState, from: Square, color: Color, turns: Turn[]): void {
-  const board = state.board;
-  const rank = from >> 3, file = from & 7;
-  for (const [dr, df] of [...ORTHO_DIRS, ...DIAG_DIRS] as const) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const to = r * 8 + f;
-      const tp = board[to];
-      if (tp) {
-        if (tp.color !== color) pushStd(turns, from, to);
-        break;
-      }
-      pushStd(turns, from, to);
-      r += dr; f += df;
-    }
-  }
-}
-
-function addFideRookMoves(state: GameState, from: Square, color: Color, turns: Turn[]): void {
-  const board = state.board;
-  const rank = from >> 3, file = from & 7;
-  for (const [dr, df] of ORTHO_DIRS) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const to = r * 8 + f;
-      const tp = board[to];
-      if (tp) {
-        if (tp.color !== color) pushStd(turns, from, to);
-        break;
-      }
-      pushStd(turns, from, to);
-      r += dr; f += df;
-    }
-  }
-}
-
-function addFideBishopMoves(state: GameState, from: Square, color: Color, turns: Turn[]): void {
-  const board = state.board;
-  const rank = from >> 3, file = from & 7;
-  for (const [dr, df] of DIAG_DIRS) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const to = r * 8 + f;
-      const tp = board[to];
-      if (tp) {
-        if (tp.color !== color) pushStd(turns, from, to);
-        break;
-      }
-      pushStd(turns, from, to);
-      r += dr; f += df;
-    }
-  }
-}
-
-function addFideKnightMoves(state: GameState, from: Square, color: Color, turns: Turn[]): void {
-  const board = state.board;
-  const rank = from >> 3, file = from & 7;
-  for (const [dr, df] of KNIGHT_JUMPS) {
-    const r = rank + dr, f = file + df;
-    if (r < 0 || r > 7 || f < 0 || f > 7) continue;
-    const to = r * 8 + f;
-    const tp = board[to];
-    if (tp && tp.color === color) continue; // no friendly captures
     pushStd(turns, from, to);
   }
 }
@@ -297,22 +229,10 @@ function wildGenerator(state: GameState): Turn[] {
 
     switch (piece.slot) {
       case 'K': addKingMoves(state, from, color, turns); break;
-      case 'Q':
-        if (piece.promoted) addFideQueenMoves(state, from, color, turns);
-        else addApexMoves(state, from, color, turns);
-        break;
-      case 'R':
-        if (piece.promoted) addFideRookMoves(state, from, color, turns);
-        else addBehemothMoves(state, from, color, turns);
-        break;
-      case 'B':
-        if (piece.promoted) addFideBishopMoves(state, from, color, turns);
-        else addStalkerMoves(state, from, color, turns);
-        break;
-      case 'N':
-        if (piece.promoted) addFideKnightMoves(state, from, color, turns);
-        else addBroncoMoves(state, from, color, turns);
-        break;
+      case 'Q': addApexMoves(state, from, color, turns); break;
+      case 'R': addBehemothMoves(state, from, color, turns); break;
+      case 'B': addStalkerMoves(state, from, color, turns); break;
+      case 'N': addBroncoMoves(state, from, color, turns); break;
       case 'P': addPawnMoves(state, from, color, turns); break;
     }
   }
@@ -335,103 +255,67 @@ function wildAttackedSquares(state: GameState, byColor: Color): Set<Square> {
 
     switch (piece.slot) {
       case 'Q': {
-        if (piece.promoted) {
-          // Promoted FIDE Queen: diagonal + orthogonal slides
-          for (const [dr, df] of [...ORTHO_DIRS, ...DIAG_DIRS] as const) {
-            let r = rank + dr, f = file + df;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-              attacked.add(r * 8 + f);
-              if (board[r * 8 + f]) break;
-              r += dr; f += df;
-            }
+        // Apex: orthogonal slides + knight jumps
+        for (const [dr, df] of ORTHO_DIRS) {
+          let r = rank + dr, f = file + df;
+          while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
+            attacked.add(r * 8 + f);
+            if (board[r * 8 + f]) break;
+            r += dr; f += df;
           }
-        } else {
-          // Apex: orthogonal slides + knight jumps
-          for (const [dr, df] of ORTHO_DIRS) {
-            let r = rank + dr, f = file + df;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-              attacked.add(r * 8 + f);
-              if (board[r * 8 + f]) break;
-              r += dr; f += df;
-            }
-          }
-          for (const [dr, df] of KNIGHT_JUMPS) {
-            const r = rank + dr, f = file + df;
-            if (r >= 0 && r <= 7 && f >= 0 && f <= 7) attacked.add(r * 8 + f);
-          }
+        }
+        for (const [dr, df] of KNIGHT_JUMPS) {
+          const r = rank + dr, f = file + df;
+          if (r >= 0 && r <= 7 && f >= 0 && f <= 7) attacked.add(r * 8 + f);
         }
         break;
       }
       case 'R': {
-        if (piece.promoted) {
-          // Promoted FIDE Rook: standard orthogonal attacks
-          for (const [dr, df] of ORTHO_DIRS) {
-            let r = rank + dr, f = file + df;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-              attacked.add(r * 8 + f);
-              if (board[r * 8 + f]) break;
-              r += dr; f += df;
+        // Behemoth: rampage-aware threat. Mark every square in the rampage run.
+        // Continue through pieces (rampage captures them) EXCEPT:
+        //   - Stop (don't add) at a friendly royal (rampage would be illegal)
+        //   - Stop (don't add) before an out-of-range enemy Behemoth (armor wall)
+        // Enemy royals are NOT blocking: their square is threatened (rampage check).
+        for (const [dr, df] of ORTHO_DIRS) {
+          let r = rank + dr, f = file + df;
+          let steps = 0;
+          while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 3) {
+            const sq = r * 8 + f;
+            const p = board[sq];
+            if (p) {
+              // Friendly royal: rampage through this is illegal — stop without adding
+              if (p.color === byColor && p.slot === 'K') break;
+              // Enemy armored Behemoth (wall): stop BEFORE this square
+              if (p.color !== byColor && p.slot === 'R' && RAMPAGE_VS_ARMOR === 'wall' && chebyshev(from, sq) > 2) break;
+              // Any other piece: mark attacked, rampage continues
+              attacked.add(sq);
+            } else {
+              attacked.add(sq);
             }
-          }
-        } else {
-          // Behemoth: rampage-aware threat. Mark every square in the rampage run.
-          // Continue through pieces (rampage captures them) EXCEPT:
-          //   - Stop (don't add) at a friendly royal (rampage would be illegal)
-          //   - Stop (don't add) before an out-of-range enemy Behemoth (armor wall)
-          // Enemy royals are NOT blocking: their square is threatened (rampage check).
-          for (const [dr, df] of ORTHO_DIRS) {
-            let r = rank + dr, f = file + df;
-            let steps = 0;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 3) {
-              const sq = r * 8 + f;
-              const p = board[sq];
-              if (p) {
-                // Friendly royal: rampage through this is illegal — stop without adding
-                if (p.color === byColor && p.slot === 'K') break;
-                // Enemy armored Behemoth (wall): stop BEFORE this square
-                if (p.color !== byColor && p.slot === 'R' && !p.promoted && RAMPAGE_VS_ARMOR === 'wall' && chebyshev(from, sq) > 2) break;
-                // Any other piece: mark attacked, rampage continues
-                attacked.add(sq);
-              } else {
-                attacked.add(sq);
-              }
-              r += dr; f += df;
-              steps++;
-            }
+            r += dr; f += df;
+            steps++;
           }
         }
         break;
       }
       case 'B': {
-        if (piece.promoted) {
-          // Promoted FIDE Bishop: full diagonal slides
-          for (const [dr, df] of DIAG_DIRS) {
-            let r = rank + dr, f = file + df;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-              attacked.add(r * 8 + f);
-              if (board[r * 8 + f]) break;
-              r += dr; f += df;
-            }
-          }
-        } else {
-          // Stalker: exhausted Stalker contributes NO attacked squares (can't capture this turn).
-          // State-aware: mirrors the same pattern as the 0-Essence Wraith.
-          if (state.exhausted.includes(from)) break;
-          for (const [dr, df] of DIAG_DIRS) {
-            let r = rank + dr, f = file + df;
-            let steps = 0;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 2) {
-              const sq = r * 8 + f;
-              attacked.add(sq);
-              if (board[sq]) break; // blocked at first piece
-              r += dr; f += df;
-              steps++;
-            }
+        // Stalker: exhausted Stalker contributes NO attacked squares (can't capture this turn).
+        // State-aware: mirrors the same pattern as the 0-Essence Wraith.
+        if (state.exhausted.includes(from)) break;
+        for (const [dr, df] of DIAG_DIRS) {
+          let r = rank + dr, f = file + df;
+          let steps = 0;
+          while (r >= 0 && r <= 7 && f >= 0 && f <= 7 && steps < 2) {
+            const sq = r * 8 + f;
+            attacked.add(sq);
+            if (board[sq]) break; // blocked at first piece
+            r += dr; f += df;
+            steps++;
           }
         }
         break;
       }
-      case 'N': { // Bronco or promoted FIDE Knight: both have standard knight attacks
+      case 'N': { // Bronco: standard knight attacks
         for (const [dr, df] of KNIGHT_JUMPS) {
           const r = rank + dr, f = file + df;
           if (r >= 0 && r <= 7 && f >= 0 && f <= 7) attacked.add(r * 8 + f);
@@ -489,7 +373,7 @@ const wildThreatModel: ThreatModel = {
   // Shatter is not routed through captureConstraints and always clears adjacent pieces.
   captureConstraints(state: GameState, capturerFrom: Square, targetSq: Square): boolean {
     const target = state.board[targetSq];
-    if (!target || target.slot !== 'R' || target.promoted) return true; // only Behemoths have Armor
+    if (!target || target.slot !== 'R') return true; // only Behemoths have Armor
     const capturer = state.board[capturerFrom];
     if (capturer && capturer.color === target.color) return true; // friendly capture: no Armor
     return chebyshev(capturerFrom, targetSq) <= 2;

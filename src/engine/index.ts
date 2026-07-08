@@ -12,6 +12,7 @@ export type {
   Shatter,
   RampageMove,
   StrikeMove,
+  MarchMove,
   RallyStep,
 } from './types';
 
@@ -31,6 +32,8 @@ export { registerThreatModel, getThreatModel, fideThreatModel } from './threat';
 
 export { registerGenerator, fideGenerator, availablePromotions } from './movegen';
 export { THRALL_HOMING_TWINS } from './phantom';
+export { bannerZone, concordPool, computeMarch } from './accord';
+export type { MarchStep } from './accord';
 
 // Army registrations (side-effect imports)
 import './phantom';
