@@ -236,20 +236,19 @@ describe('Shade Ghostwalk', () => {
     expect(hasMove(turns, 'e8', 'd8')).toBe(true);
   });
 
-  it('promoted Phantom Queen does NOT Ghostwalk (blocked sliding, captures normally)', () => {
+  it('a promoted Q-slot piece IS the Shade (Reinforcement, v2.3): Ghostwalks, cannot capture', () => {
     // No Shade on the board (Q-slot open) → Thrall on e7 may promote to Q.
     // White King a1, Black King g1, Black rook e4.
     const s0 = parseSfen('8/4P3/8/8/4r3/8/8/K5k1/w/Phantom,Crown/-/-/0,0/-/0/5');
     const s1 = applyTurnUnchecked(s0, mv('e7', 'e8', 'Q'));
-    expect(s1.board[sq('e8')]?.promoted).toBe(true);
-    // Black rook steps up the file: e4→e5. Now the promoted Queen on e8 faces
+    // Black rook steps up the file: e4→e5. The reborn Shade on e8 faces
     // the rook on its own file with empty squares on both sides of it.
     const s2 = applyTurnUnchecked(s1, mv('e4', 'e5'));
     const turns = legalTurns(s2);
-    expect(hasMove(turns, 'e8', 'e6')).toBe(true);  // slides up to the blocker
-    expect(hasMove(turns, 'e8', 'e5')).toBe(true);  // CAPTURES it (Shade never could)
-    expect(hasMove(turns, 'e8', 'e4')).toBe(false); // blocked — no ghostwalk past it
-    expect(hasMove(turns, 'e8', 'e2')).toBe(false);
+    expect(hasMove(turns, 'e8', 'e6')).toBe(true);  // toward the blocker
+    expect(hasMove(turns, 'e8', 'e5')).toBe(false); // cannot capture — it IS the Shade
+    expect(hasMove(turns, 'e8', 'e4')).toBe(true);  // Ghostwalks straight through the rook
+    expect(hasMove(turns, 'e8', 'e2')).toBe(true);
   });
 });
 
@@ -483,10 +482,11 @@ describe('Cross-army captures', () => {
 // (teleport-capture, strike, rampage — all remove the Shade, all legal)
 // ---------------------------------------------------------------------------
 describe('Shade check vs non-standard captures', () => {
-  it('Veil Wraith may teleport-capture the checking Shade; teleport interposition stays illegal', () => {
+  it('Veil Wraith may NOT teleport-execute the checking Shade (No Executions, v2.3) — but may slide-capture it', () => {
     // White Shade on e6 checks Black King on e8 (e7 empty → LOS).
-    // Black Wraith on b1 is NOT queen-aligned with e6, so its only way to take
-    // the Shade is a teleport-capture (Essence B=1 makes it available).
+    // Black Wraith on b1 is NOT queen-aligned with e6: its only global answer would
+    // be a teleport-capture, which the v2.3 No Executions rule bans against Q-slot
+    // pieces. The Wraith must answer some other way.
     const state = parseSfen('4k3/8/4Q3/8/8/8/8/Kq6/b/Phantom,Veil/-/-/0,1/-/0/5');
     const turns = legalTurns(state);
 
@@ -494,7 +494,7 @@ describe('Shade check vs non-standard captures', () => {
       t.primary.type === 'teleport' &&
       t.primary.from === sq('b1') && t.primary.to === sq('e6') && t.primary.isCapture,
     );
-    expect(teleCapShade).toBe(true);
+    expect(teleCapShade).toBe(false);
 
     // Teleporting the Wraith to e7 would physically block the Shade's LOS, but
     // interposition is never a legal answer to a piercing check.
@@ -506,6 +506,12 @@ describe('Shade check vs non-standard captures', () => {
 
     // King moves remain legal (d8 is off the Shade's lines).
     expect(hasMove(turns, 'e8', 'd8')).toBe(true);
+
+    // A queen-LINE Wraith capture of the Shade is still a legal answer:
+    // put the Wraith on b6 (same rank as e6, c6/d6 empty) instead.
+    const lineState = parseSfen('4k3/8/1q2Q3/8/8/8/8/K7/b/Phantom,Veil/-/-/0,1/-/0/5');
+    const lineTurns = legalTurns(lineState);
+    expect(hasMove(lineTurns, 'b6', 'e6')).toBe(true);
   });
 
   it('Wild Stalker may Strike the checking Shade', () => {

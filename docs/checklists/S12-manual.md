@@ -66,10 +66,15 @@ Run through this checklist after any change to `src/ui/`. Use the dev server (`n
 - [ ] When any Accord player has a Herald on the board, the `overlay-banner` tint is visible on squares within Chebyshev-1 of the Herald.
 - [ ] If the Herald moves, the banner zone updates immediately on the same turn.
 
-### Empowered pieces
-- [ ] Friendly non-pawn, non-Herald pieces in the banner zone show a **✦ badge** (`piece-badge-empowered`).
-- [ ] Selecting an empowered Knight/Bishop/Rook shows additional king-step destinations beyond its native moves.
-- [ ] If the Herald is captured or moves away, the empowered badge disappears on the opponent's next view.
+### Concord (v2.3)
+- [ ] Friendly Knight/Bishop/Rook pieces in the banner zone show a **✦ badge** (`piece-badge-empowered`) when at least two distinct slots share the zone.
+- [ ] Selecting a Knight in Concord with a Rook shows rook-slide destinations beyond its native jumps (and vice versa).
+- [ ] A lone piece in the Banner shows no badge and gains no bonus moves.
+- [ ] If the Herald is captured or moves away, the badge disappears on the opponent's next view.
+
+### The March (v2.3)
+- [ ] Tapping the Herald then an empty adjacent square offers "Move" vs "March" in the chooser when another Banner piece can step.
+- [ ] The March preview lists every piece that will step and its destination; confirming steps the whole formation; blocked pieces hold; nothing is captured.
 
 ### Herald moves
 - [ ] Selecting the Herald shows only empty squares as destinations (Herald cannot capture).

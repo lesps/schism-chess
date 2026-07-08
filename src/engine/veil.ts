@@ -47,12 +47,15 @@ function addWraithMoves(state: GameState, sq: Square, color: Color, turns: Turn[
 
   // Teleport moves: only to squares NOT already reachable by sliding.
   // Avoids duplicate (from, to) pairs with the standard moves above.
+  // No Executions (v2.3): a teleport-capture may not target a royal or any
+  // Queen-slot piece (Queen, Shade, Herald, Apex, enemy Wraith) — keystones must
+  // be approached on a queen line, not assassinated from across the board.
   for (let t = 0; t < 64; t++) {
     if (t === sq || slideReachable.has(t)) continue;
     const tp = board[t];
     if (!tp) {
       pushTeleport(turns, sq, t, false); // teleport to empty square
-    } else if (tp.color !== color && essence > 0) {
+    } else if (tp.color !== color && essence > 0 && tp.slot !== 'K' && tp.slot !== 'Q') {
       pushTeleport(turns, sq, t, true); // teleport capture (costs Essence)
     }
   }
@@ -64,45 +67,6 @@ function addWispMoves(state: GameState, sq: Square, _color: Color, turns: Turn[]
   for (let t = 0; t < 64; t++) {
     if (t === sq || board[t]) continue;
     pushTeleport(turns, sq, t, false);
-  }
-}
-
-// Promoted FIDE Queen: standard 8-direction slides with captures.
-// No Wraith abilities: no teleport, no Essence cost, checks normally at any Essence.
-function addQueenSlideMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
-  const board = state.board;
-  const rank = sq >> 3, file = sq & 7;
-  for (const [dr, df] of ALL_DIRS) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const target = r * 8 + f;
-      const tp = board[target];
-      if (tp) {
-        if (tp.color !== color) pushStandard(turns, sq, target);
-        break;
-      }
-      pushStandard(turns, sq, target);
-      r += dr; f += df;
-    }
-  }
-}
-
-// Promoted FIDE Rook: standard orthogonal slides with captures.
-function addRookSlideMoves(state: GameState, sq: Square, color: Color, turns: Turn[]): void {
-  const board = state.board;
-  const rank = sq >> 3, file = sq & 7;
-  for (const [dr, df] of [[-1,0],[1,0],[0,-1],[0,1]] as const) {
-    let r = rank + dr, f = file + df;
-    while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-      const target = r * 8 + f;
-      const tp = board[target];
-      if (tp) {
-        if (tp.color !== color) pushStandard(turns, sq, target);
-        break;
-      }
-      pushStandard(turns, sq, target);
-      r += dr; f += df;
-    }
   }
 }
 
@@ -200,20 +164,8 @@ function veilGenerator(state: GameState): Turn[] {
 
     switch (piece.slot) {
       case 'K': addKingMoves(state, sq, color, turns); break;
-      case 'Q':
-        if (piece.promoted) {
-          addQueenSlideMoves(state, sq, color, turns);
-        } else {
-          addWraithMoves(state, sq, color, turns);
-        }
-        break;
-      case 'R':
-        if (piece.promoted) {
-          addRookSlideMoves(state, sq, color, turns);
-        } else {
-          addWispMoves(state, sq, color, turns);
-        }
-        break;
+      case 'Q': addWraithMoves(state, sq, color, turns); break;
+      case 'R': addWispMoves(state, sq, color, turns); break;
       case 'B': addBishopMoves(state, sq, color, turns); break;
       case 'N': addKnightMoves(state, sq, color, turns); break;
       case 'P': addPawnMoves(state, sq, color, turns); break;
@@ -239,9 +191,8 @@ function veilAttackedSquares(state: GameState, byColor: Color): Set<Square> {
 
     switch (piece.slot) {
       case 'Q': {
-        // Promoted FIDE Queen attacks Queen-LOS unconditionally (no Essence gating);
-        // the Wraith attacks Queen-LOS only at ≥1 Essence — inert at 0.
-        if (piece.promoted || essence >= 1) {
+        // The Wraith attacks Queen-LOS only at ≥1 Essence — inert at 0.
+        if (essence >= 1) {
           for (const [dr, df] of ALL_DIRS) {
             let r = rank + dr, f = file + df;
             while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
@@ -253,21 +204,9 @@ function veilAttackedSquares(state: GameState, byColor: Color): Set<Square> {
         }
         break;
       }
-      case 'R': {
-        if (piece.promoted) {
-          // Promoted FIDE Rook: standard orthogonal attacks
-          for (const [dr, df] of [[-1,0],[1,0],[0,-1],[0,1]] as const) {
-            let r = rank + dr, f = file + df;
-            while (r >= 0 && r <= 7 && f >= 0 && f <= 7) {
-              attacked.add(r * 8 + f);
-              if (board[r * 8 + f]) break;
-              r += dr; f += df;
-            }
-          }
-        }
-        // else: Wisp — physically occupies space but does not attack; gives no check
+      case 'R':
+        // Wisp — physically occupies space but does not attack; gives no check
         break;
-      }
       case 'K': {
         for (let dr = -1; dr <= 1; dr++) {
           for (let df = -1; df <= 1; df++) {

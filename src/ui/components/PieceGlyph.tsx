@@ -12,7 +12,7 @@ interface Props {
 export function PieceGlyph({ piece, armies, empowered, exhausted }: Props) {
   const army = armies[piece.color];
   const color = PIECE_COLORS[army][piece.color];
-  const label = getSlotName(piece.slot, army, piece.promoted ?? false);
+  const label = getSlotName(piece.slot, army);
   const side: Color = piece.color;
 
   return (
@@ -30,7 +30,7 @@ export function PieceGlyph({ piece, armies, empowered, exhausted }: Props) {
       data-empowered={empowered ? 'true' : undefined}
       data-exhausted={exhausted ? 'true' : undefined}
     >
-      <PieceIcon slot={piece.slot} color={piece.color} army={army} promoted={piece.promoted} />
+      <PieceIcon slot={piece.slot} color={piece.color} army={army} />
       {empowered && <span className="piece-badge piece-badge-empowered" aria-hidden>✦</span>}
       {exhausted && <span className="piece-badge piece-badge-exhausted" aria-hidden>⊗</span>}
     </span>

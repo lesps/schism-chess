@@ -12,18 +12,18 @@ export type Army = 'Crown' | 'Phantom' | 'Accord' | 'Twins' | 'Veil' | 'Wild';
 // Twins' Warlords = 'K' on BOTH d1 and e1 (no 'Q'-slot piece). Phantom's Thralls = 'P'.
 export type Slot = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
 
+// Reinforcement Promotion (RULES v2.3): a promoted piece IS its army's piece for the
+// slot — there is no promoted flag and no hidden state; the board is fully readable.
 export interface Piece {
   slot: Slot;
   color: Color;
-  /** True for pieces that reached their slot via promotion (behave as standard FIDE, no army abilities). */
-  promoted?: true;
 }
 
 export interface StandardMove {
   type: 'standard';
   from: Square;
   to: Square;
-  promotion?: Slot; // Q/R/B/N only — never an army-specific piece
+  promotion?: Slot; // Q/R/B/N — the mover's own army piece for that slot (v2.3)
 }
 
 export interface TeleportMove {
@@ -54,7 +54,16 @@ export interface StrikeMove {
   target: Square; // square of the captured piece
 }
 
-export type PrimaryAction = StandardMove | TeleportMove | Shatter | RampageMove | StrikeMove;
+// Accord March (RULES v2.3): the Herald steps from → to (one king-step to an empty
+// square) and every friendly piece inside the Banner steps one square in the same
+// direction — the column steps from the front; blocked pieces hold. Non-capturing.
+export interface MarchMove {
+  type: 'march';
+  from: Square; // Herald's square
+  to: Square;   // Herald's destination (one step; defines the march direction)
+}
+
+export type PrimaryAction = StandardMove | TeleportMove | Shatter | RampageMove | StrikeMove | MarchMove;
 
 export interface RallyStep {
   from: Square;

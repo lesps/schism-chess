@@ -12,7 +12,7 @@ A two-player asymmetric chess variant on a standard 8×8 board. Each player secr
 |------|-----------|-----------------|
 | **Crown** | Highest raw material; the only army that castles and over-promotes | Checkmate / flexible |
 | **Phantom** | Shade gives *piercing* check (interposition banned); homing Thralls | Zugzwang nets, checkmate |
-| **Accord** | Herald Banner empowers your clustered phalanx | Positional control, escort invasion |
+| **Accord** | Herald Banner — pieces share their movement in Concord and March as one | Positional control, escort invasion |
 | **Twins** | Two royal Warlords; bonus Rally step; Shatter action | Dual invasion / checkmate |
 | **Veil** | Essence-gated Wraith that slides or teleports; teleporting Wisps | Invasion, material pressure |
 | **Wild** | Chancellor Apex, siege Behemoth, ambush Stalker, friendly-fire Bronco | Positional dominance |

@@ -14,7 +14,7 @@ export const ARMY_NAMES: Record<Army, string> = {
 export const ARMY_TAGLINES: Record<Army, string> = {
   Crown:   'Highest raw material; castles; flexible',
   Phantom: 'Ghostwalking Shade; piercing check; homing Thralls',
-  Accord:  'Herald Banner — the phalanx parts and strikes through itself',
+  Accord:  'Herald Banner — pieces in concord share their arts and march as one',
   Twins:   'Two royals; Rally action; Shatter',
   Veil:    'Essence-gated teleporting Wraith',
   Wild:    'Chancellor, siege engine, ambush predator',
@@ -25,7 +25,7 @@ export const ARMY_TAGLINES: Record<Army, string> = {
 export const ARMY_IDENTITIES: Record<Army, string> = {
   Crown:   'The benchmark army: standard chess. It owns the only true Queen, the only castling, and can always re-promote to Queen. No tricks — it wins by conventional pressure and is never structurally lost.',
   Phantom: 'A relentless hunter. The Shade never captures but Ghostwalks through pieces and gives piercing check — blocking is impossible, so the enemy King must run or someone must hunt the Shade down. Homing Thralls creep toward the enemy King to close the net.',
-  Accord:  'A phalanx built around its standard-bearer. Inside the Herald’s 3×3 Banner the formation parts for its own: Rooks and Bishops slide straight through friendly pieces, and Knights ride their leap again and again in a line. Devastating while the formation holds — and it collapses the moment the Herald falls.',
+  Accord:  'A phalanx built around its standard-bearer. Knights, Bishops, and Rooks inside the Herald’s 3×3 Banner move in Concord — each may use the movement of any of them — and the Herald can lead a March, stepping the whole formation one square as a single move. Devastating while the formation holds — and it collapses the moment the Herald falls.',
   Twins:   'Two royal Warlords and the best action economy in the game: move, then optionally Rally one Warlord a free step. Shatter annihilates everything around a Warlord — sparing only royals, so paired Warlords can still detonate. Both must cross the midline to invade — and both must be kept safe.',
   Veil:    'A resource-gated assassin. The Wraith moves as a Queen or teleports anywhere, paying 1 Essence per capture — at 0 Essence it goes inert. Feed it by capturing enemy pawns with your minor pieces; its Wisps teleport to block and obstruct.',
   Wild:    'Unorthodox aggression at short range: the Apex leaps like a rook-knight, armored Behemoths rampage through whole files, Stalkers strike and slip back home, and Broncos trample even their own. Slow to develop, brutal up close.',
@@ -64,8 +64,7 @@ export const ARMY_ACCENTS: Record<Army, string> = {
   Wild:    '#f0a840',
 };
 
-export function getSlotName(slot: Slot, army: Army, promoted: boolean): string {
-  if (promoted) return slotBaseName(slot);
+export function getSlotName(slot: Slot, army: Army): string {
   return SLOT_NAMES[army]?.[slot] ?? slotBaseName(slot);
 }
 
@@ -103,10 +102,10 @@ const ARMY_PIECE_INFO: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
     P: 'Forward one (no double step); captures diagonally; or homes one step toward the enemy King. Promotes.',
   },
   Accord: {
-    Q: 'Steps one square, never captures. Friendly Rooks and Bishops next to it slide through friendly pieces; friendly Knights ride their leap in a line.',
-    R: 'Slides orthogonally. In the Herald’s Banner it slides straight through friendly pieces — enemies still block.',
-    B: 'Slides diagonally. In the Herald’s Banner it slides straight through friendly pieces — enemies still block.',
-    N: 'Knight jumps. In the Herald’s Banner it becomes a Nightrider: the leap repeats in a straight line, passing over friendly pieces.',
+    Q: 'Steps one square, never captures. Knights/Bishops/Rooks in its Banner share their movement (Concord). Can lead a March: the whole formation steps one square together.',
+    R: 'Slides orthogonally. In the Herald’s Banner it also gains the movement of any Bishop or Knight standing there with it.',
+    B: 'Slides diagonally. In the Herald’s Banner it also gains the movement of any Rook or Knight standing there with it.',
+    N: 'Knight jumps. In the Herald’s Banner it also gains the movement of any Rook or Bishop standing there with it.',
   },
   Twins: {
     K: 'Royal. Steps one square; afterwards one Warlord may Rally a free step. Can Shatter everything adjacent (royals are spared). Both Warlords past the midline wins.',
@@ -124,8 +123,7 @@ const ARMY_PIECE_INFO: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
 };
 
 /** One-line reminder of what a piece does, keyed by army + slot. */
-export function getPieceInfo(slot: Slot, army: Army, promoted: boolean): string {
-  if (promoted) return STANDARD_PIECE_INFO[slot];
+export function getPieceInfo(slot: Slot, army: Army): string {
   return ARMY_PIECE_INFO[army]?.[slot] ?? STANDARD_PIECE_INFO[slot];
 }
 
@@ -139,6 +137,7 @@ export function getPrimaryFrom(turn: Turn): Square {
     case 'shatter':  return p.warlordSquare;
     case 'rampage':  return p.from;
     case 'strike':   return p.from;
+    case 'march':    return p.from; // Herald's square
   }
 }
 
@@ -150,6 +149,7 @@ export function getPrimaryDest(turn: Turn): Square {
     case 'shatter':  return p.warlordSquare; // stays in place; tapped again
     case 'rampage':  return p.to;
     case 'strike':   return p.target;
+    case 'march':    return p.to; // Herald's destination
   }
 }
 
@@ -179,6 +179,8 @@ export function getDestHighlight(
     case 'strike':
       return 'legal-special';
     case 'rampage':
+      return 'legal-special';
+    case 'march':
       return 'legal-special';
     case 'teleport':
       return p.isCapture ? 'legal-teleport-capture' : 'legal-teleport-move';
@@ -234,7 +236,7 @@ export function isThrallHomingMove(turn: Turn, board: GameState['board'], moverC
   const p = turn.primary;
   if (p.type !== 'standard') return false;
   const piece = board[p.from];
-  if (!piece || piece.slot !== 'P' || piece.promoted) return false;
+  if (!piece || piece.slot !== 'P') return false;
   if (board[p.to] !== null) return false; // captures are not homing
   const dr = squareRank(p.to) - squareRank(p.from);
   const df = squareFile(p.to) - squareFile(p.from);
@@ -258,6 +260,8 @@ export function primaryEq(a: PrimaryAction, b: PrimaryAction): boolean {
       return b.type === 'rampage' && a.from === b.from && a.to === b.to;
     case 'strike':
       return b.type === 'strike' && a.from === b.from && a.target === b.target;
+    case 'march':
+      return b.type === 'march' && a.from === b.from && a.to === b.to;
   }
 }
 
@@ -362,6 +366,8 @@ export function extractCaptures(state: GameState, turn: Turn): Piece[] {
       if (t) captures.push(t);
       break;
     }
+    case 'march':
+      break; // the March never captures
   }
 
   return captures;

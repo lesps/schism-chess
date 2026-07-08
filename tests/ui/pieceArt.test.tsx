@@ -29,11 +29,12 @@ describe('PieceGlyph SVG art', () => {
     expect(shade).not.toBe(apex);
   });
 
-  it('promoted pieces fall back to the standard shape', () => {
-    const thrallPromotedToQ = glyphSvg({ slot: 'Q', color: 'W', promoted: true })!.innerHTML;
+  it('a promoted piece renders as the army piece (Reinforcement, v2.3)', () => {
+    // A Thrall promoted to Q IS the Shade — same slot, same army, same shape.
+    const promotedQ = glyphSvg({ slot: 'Q', color: 'W' })!.innerHTML;
     cleanup();
     const shade = glyphSvg({ slot: 'Q', color: 'W' })!.innerHTML;
-    expect(thrallPromotedToQ).not.toBe(shade);
+    expect(promotedQ).toBe(shade);
   });
 
   it('keeps data attributes used by tests and styling', () => {
@@ -47,18 +48,13 @@ describe('PieceGlyph SVG art', () => {
 
 describe('getPieceInfo', () => {
   it('returns the army-specific description when one exists', () => {
-    expect(getPieceInfo('Q', 'Phantom', false)).toMatch(/pierces/i);
-    expect(getPieceInfo('R', 'Wild', false)).toMatch(/rampage/i);
+    expect(getPieceInfo('Q', 'Phantom')).toMatch(/pierces/i);
+    expect(getPieceInfo('R', 'Wild')).toMatch(/rampage/i);
   });
 
   it('falls back to the standard description otherwise', () => {
-    expect(getPieceInfo('N', 'Crown', false)).toMatch(/L-shape/);
-    expect(getPieceInfo('B', 'Twins', false)).toMatch(/diagonals/i);
-  });
-
-  it('promoted pieces get the standard description', () => {
-    expect(getPieceInfo('Q', 'Phantom', true)).not.toMatch(/pierces/i);
-    expect(getPieceInfo('Q', 'Phantom', true)).toMatch(/ranks, files, and diagonals/i);
+    expect(getPieceInfo('N', 'Crown')).toMatch(/L-shape/);
+    expect(getPieceInfo('B', 'Twins')).toMatch(/diagonals/i);
   });
 });
 

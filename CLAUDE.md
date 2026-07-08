@@ -70,11 +70,13 @@ Done: S14 (**v1.0.0 shipped** — polish, docs, deploy: `README.md`, `docs/ARCHI
 
 **No remaining engine todos. v1.0.0 shipped.**
 
+Post-1.0 rules passes: **v1.1.0 / RULES v2.2** (Accord phalanx Empowerment; Twins Shatter spares royals) and **v1.2.0 / RULES v2.3** (Reinforcement Promotion — pawns promote to the army's own pieces, `promoted` flag deleted; Accord Concord + the March replace phalanx/Nightrider, `ACCORD_EMPOWERMENT` flag deleted; Veil No Executions — teleport-captures can't target royals or Q-slot pieces). The army sections below describe the **current (v2.3)** rules.
+
 ## Post-1.0 Backlog
 
 The following are deferred and tracked as GitHub issues:
 
-1. ~~**SVG piece set**~~ — **done post-1.0**: original inline SVGs in `src/ui/pieceArt.tsx` (`PieceIcon`), rendered behind the `PieceGlyph` seam. Standard FIDE set + 10 army-specific shapes (Shade, Thrall, Herald, Warlord, Wraith, Wisp, Apex, Behemoth, Stalker, Bronco); promoted pieces fall back to the standard set. Also added: selected-piece move-reminder bar (`getPieceInfo` in `shared.ts`, rendered by `GameScreen`, tested in `tests/ui/pieceArt.test.tsx`).
+1. ~~**SVG piece set**~~ — **done post-1.0**: original inline SVGs in `src/ui/pieceArt.tsx` (`PieceIcon`), rendered behind the `PieceGlyph` seam. Standard FIDE set + 10 army-specific shapes (Shade, Thrall, Herald, Warlord, Wraith, Wisp, Apex, Behemoth, Stalker, Bronco); since v2.3 promoted pieces ARE army pieces, so army shapes always render. Also added: selected-piece move-reminder bar (`getPieceInfo` in `shared.ts`, rendered by `GameScreen`, tested in `tests/ui/pieceArt.test.tsx`).
 2. **Network backend** — plug in a server as a payload mailbox above the `Transport` interface (see `docs/PBM-PROTOCOL.md §Network` and `docs/ARCHITECTURE.md §Transport seam`). No other code changes needed.
 3. **Sound** — move/capture/check audio; `prefers-reduced-motion` + a mute toggle.
 4. **AI opponent** — single-player mode; engine is already pure TS so a WASM worker is natural.
@@ -99,12 +101,16 @@ The following are deferred and tracked as GitHub issues:
 | `registerGenerator(army, gen)` | `movegen.ts` |
 | `fideGenerator` | `movegen.ts` |
 | `THRALL_HOMING_TWINS` | `phantom.ts` |
+| `bannerZone(board, color): Set<Square>` | `accord.ts` |
+| `concordPool(board, color): Set<Slot>` | `accord.ts` |
+| `computeMarch(board, color, dr, df): MarchStep[] \| null` | `accord.ts` |
+| `MarchStep` (type) | `accord.ts` |
 | `ThreatModel` (interface) | `threat.ts` |
 | `GameStatus` (type) | `status.ts` |
 | `Square`, `Color`, `Army`, `Slot` | `types.ts` |
 | `Piece`, `GameState` | `types.ts` |
 | `Turn`, `PrimaryAction` | `types.ts` |
-| `StandardMove`, `TeleportMove`, `Shatter`, `RampageMove`, `StrikeMove`, `RallyStep` | `types.ts` |
+| `StandardMove`, `TeleportMove`, `Shatter`, `RampageMove`, `StrikeMove`, `MarchMove`, `RallyStep` | `types.ts` |
 | `ParseError`, `ReplayError`, `GameRecord` | `notation.ts` |
 | `isParseError(x): x is ParseError` | `notation.ts` |
 | `turnToSan(state, turn): string` | `notation.ts` |
@@ -212,7 +218,11 @@ Not yet implemented: notation; UI; PBM logic.
 
 ## captureConstraints call-site (S4 wired; S7a populates; S7b extended)
 
-`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for `StandardMove` captures, `TeleportMove` captures, each square in `RampageMove.captures`, and `StrikeMove.target`. Default: no registered model = no constraint. Wild's `captureConstraints` (S7a) enforces Behemoth Armor: enemy captures of the Behemoth (R-slot) require `Chebyshev(capturerFrom, targetSq) ≤ 2`; friendly captures bypass Armor. Shatter (`type: 'shatter'`) is NOT routed through `captureConstraints` — it removes neighbors directly in `apply.ts`, so it always clears a Behemoth regardless of distance.
+`legality.ts` applies `targetModel.captureConstraints(state, capturerFrom, targetSq)` for `StandardMove` captures, `TeleportMove` captures, each square in `RampageMove.captures`, and `StrikeMove.target`. Default: no registered model = no constraint. Wild's `captureConstraints` (S7a) enforces Behemoth Armor: enemy captures of the Behemoth (R-slot) require `Chebyshev(capturerFrom, targetSq) ≤ 2`; friendly captures bypass Armor. Shatter (`type: 'shatter'`) is NOT routed through `captureConstraints` — it removes neighbors directly in `apply.ts`, so it always clears a Behemoth regardless of distance. `MarchMove` is not routed either (a March never captures).
+
+## Veil No Executions (v2.3)
+
+The Wraith's teleport-capture generation in `veil.ts` skips enemy pieces of slot `'K'` or `'Q'` (any army): royals and Queen-slot keystones (Queen, Shade, Herald, Apex, mirror Wraith) cannot be teleport-executed. Queen-LINE Wraith captures of those pieces stay legal. Enforced in the generator, not `captureConstraints` (it's a restriction on the Wraith's own move set, not a target-army veto). Knock-on: Phantom's `checkResponseConstraint` never sees a teleport-capture of the Shade anymore — a piercing check is answered by king move, line-capture, Strike, rampage, or Shatter.
 
 ## lastTurnMeta (added S4)
 
@@ -226,9 +236,9 @@ Not yet implemented: notation; UI; PBM logic.
 
 Registered as both generator and ThreatModel for army `'Phantom'`.
 
-**Shade** (Q-slot): moves along Queen lines with **Ghostwalk** (RULES v2.1) — movement passes through occupied squares (friendly and enemy alike), landing only on empty ones. Cannot capture. Threat is NOT ghostwalked: `attackedSquares` still stops at the first blocker (LOS), so no check through walls. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`). Promoted Phantom Queens are plain FIDE Queens (blocked sliding, capture normally, no Ghostwalk).
+**Shade** (Q-slot): moves along Queen lines with **Ghostwalk** (RULES v2.1) — movement passes through occupied squares (friendly and enemy alike), landing only on empty ones. Cannot capture. Threat is NOT ghostwalked: `attackedSquares` still stops at the first blocker (LOS), so no check through walls. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`; note a Wraith teleport-capture is NOT among them since v2.3 No Executions). A pawn promoted to Q IS a new Shade (Reinforcement, v2.3).
 
-**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to an unoccupied square that steps genuinely toward the enemy king: Chebyshev distance strictly decreases AND neither axis distance increases). No en passant given or received. Promote to standard FIDE pieces.
+**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to an unoccupied square that steps genuinely toward the enemy king: Chebyshev distance strictly decreases AND neither axis distance increases). No en passant given or received. Promote to Phantom pieces per Reinforcement (v2.3).
 
 `THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if the step homes toward at least one Warlord.
 
@@ -238,9 +248,11 @@ Registered as both generator and ThreatModel for army `'Accord'`.
 
 **Herald** (Q-slot): king-step move only, **cannot capture** (target square must be empty). Not royal — never appears in `royalsInCheck`, contributes zero attacked squares (same convention as Veil's Wisp), and is captured like any ordinary piece by the opponent's own movegen.
 
-**Banner**: `bannerZone(board, color)` (exported) returns the Chebyshev-distance-≤1 zone around the friendly Herald, clipped at the board edge (4 squares in a corner, 6 on an edge, 9 in the open). A friendly Knight/Bishop/Rook standing in that zone is **Empowered** — computed fresh from the current board on every call to the generator and to `attackedSquares`, so checks appear/vanish purely positionally (Herald moves, dies, or the piece leaves the zone) with no extra bookkeeping.
+**Banner**: `bannerZone(board, color)` (exported) returns the Chebyshev-distance-≤1 zone around the friendly Herald, clipped at the board edge (4 squares in a corner, 6 on an edge, 9 in the open). Everything below is computed fresh from the current board on every call to the generator and to `attackedSquares`, so checks appear/vanish purely positionally (Herald moves, dies, or the piece leaves the zone) with no extra bookkeeping.
 
-**`ACCORD_EMPOWERMENT: 'phalanx' | 'king-step' | 'queen'`** (default `'phalanx'`, RULES v2.2) — module-level flag in `accord.ts`, mutated only via the exported `setAccordEmpowerment(mode)` (ES module live-binding; importers read `ACCORD_EMPOWERMENT` directly but must call the setter to change it, e.g. in test `afterEach`). `'phalanx'`: Empowered R/B slide **through friendly pieces** (may not land on them; enemies block/capture normally) and Empowered N becomes a **Nightrider** (leap repeats in a line; empty and friendly landing squares let the ride continue; first enemy is captured and ends it) — this mode REPLACES the native move/attack set (`phalanxSlideTargets`/`phalanxKnightTargets`, both supersets of native). Threat mirrors movement, with friendly squares along a phalanx ray counted as defended. Legacy `'king-step'` (one-square move-or-capture bonus) and `'queen'` (full Queen-slide bonus) are union-with-native, deduped via `slideTargets`/`knightTargets`/`kingStepTargets`. Pawns are never Empowered; promoted R/B/N are Empowered normally (promotion carries no metadata, so this falls out of reading the board as-is).
+**Concord** (RULES v2.3): `concordPool(board, color)` (exported) returns the set of N/B/R slots among friendly pieces inside the Banner. Each in-Banner N/B/R may move and capture using the union of the pool's native movesets (normal blocking; a lone piece's pool is its own slot — it gains nothing). Threat mirrors movement. Pawns take no part; the King and Herald neither contribute nor receive. The v2.2 phalanx/Nightrider modes and the `ACCORD_EMPOWERMENT` flag were deleted in v2.3.
+
+**The March** (RULES v2.3, primary action `type: 'march'` with `{ from, to }` = Herald step): the Herald steps one square to an empty square and every friendly piece inside the Banner steps one square the same direction — column from the front (descending projection onto the direction), blocked/off-board/final-rank-pawn marchers hold, nothing is captured. Generated only when the Herald steps AND ≥1 other piece steps (otherwise it's just a Herald move). `computeMarch(board, color, dr, df)` (exported) is the single source of truth shared by the generator, `apply.ts`, and `MarchPreview`. March sets no ep target, never touches castling rights, and resets the halfmove clock iff a pawn stepped. SAN: `Q>d5`.
 
 Pawns/King have no Accord-specific behavior (King is a plain non-castling king-step royal, matching the Phantom/Veil convention — only Crown gets castling rights from `initialState`).
 

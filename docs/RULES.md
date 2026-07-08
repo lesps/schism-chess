@@ -1,4 +1,4 @@
-# Schism Chess — Rules v2.2
+# Schism Chess — Rules v2.3
 
 A chess variant inspired by David Sirlin's Chess 2: The Sequel. Six asymmetric armies, a midline invasion win condition, and no hidden information.
 
@@ -77,7 +77,7 @@ Quick identities and primary win lanes:
 |-------|------------------------------------------------------------|-----------------------------------|
 |Crown  |Highest raw material; only army that castles & over-promotes|Checkmate / flexible               |
 |Phantom|**Ghostwalking** Shade gives **piercing** check; homing Thralls|Zugzwang nets, checkmate           |
-|Accord |Herald **Banner** — the phalanx parts and strikes through itself|Positional control, escort invasion|
+|Accord |Herald **Banner** — pieces move in **Concord** and **March** as one|Positional control, escort invasion|
 |Twins  |Two royal Warlords; Rally action economy; Shatter (spares royals)|Invasion + tactical tempo          |
 |Veil   |Essence-gated teleporting Wraith that can now **check**     |Surgical checkmate + invasion      |
 |Wild   |Unorthodox attackers (chancellor, siege, ambush)            |Aggressive checkmate               |
@@ -115,7 +115,7 @@ Quick identities and primary win lanes:
 - **Ghostwalk (new in v2.1).** The Shade's *movement* passes **through occupied squares** — friendly and enemy pieces alike — as if they weren't there. It may only **land on an empty square**. Ghostwalk affects movement only: the Shade's threat (check) still requires a clear line of sight, exactly as below.
 - **Cannot capture.**
 - **Can be captured normally** by any enemy piece (Counterplay Principle) — but good luck cornering it.
-- **Piercing check.** The Shade gives check like a Queen **and requires a clear line of sight** — intervening pieces block it, so the Shade gives **no check through a wall** (in particular, no check exists at game start, when files and diagonals are blocked by pawns). Once the Shade *does* check, that check **may not be answered by interposing a piece**: the only legal responses are to **move the king** or to **capture the Shade** (by any capture mechanism the answering army has — an ordinary capture, a Wraith teleport-capture, a Stalker Strike, a Behemoth rampage, or a Shatter that removes it). The Shade can give checkmate.
+- **Piercing check.** The Shade gives check like a Queen **and requires a clear line of sight** — intervening pieces block it, so the Shade gives **no check through a wall** (in particular, no check exists at game start, when files and diagonals are blocked by pawns). Once the Shade *does* check, that check **may not be answered by interposing a piece**: the only legal responses are to **move the king** or to **capture the Shade** (by any capture mechanism the answering army has — an ordinary capture, a Wraith queen-line capture, a Stalker Strike, a Behemoth rampage, or a Shatter that removes it; the Wraith's *teleport*-capture is not available — the Shade is a Queen-slot piece and teleport-executions are banned, see **No Executions** under The Veil). The Shade can give checkmate.
 
 > **v2.0.1 fix.** v2.0 described this as an "unblockable check." Simulation showed that reading was incoherent and game-breaking: interpreted as checking *through* blockers, the Shade put an opponent's royal in checkmate on move 0 along its starting file (it forced an immediate loss in Phantom-vs-Twins). The piercing-check definition above — line-of-sight to *give* the check, no interposition to *answer* it — is the coherent, balanced version and is what v2.0.1 ships.
 
@@ -131,7 +131,7 @@ Quick identities and primary win lanes:
 
 ### 3. The Accord
 
-*An army that fights as a coordinated phalanx around its standard-bearer. v2.0 replaces piece-to-piece linking with a single, glanceable Banner aura.*
+*An army that fights as a coordinated phalanx around its standard-bearer. v2.3 replaces per-piece Empowerment with two formation mechanics: pieces in the Banner share their arts (Concord), and the whole formation can advance as one (the March).*
 
 **Composition:** King e1/e8, **Herald** d1/d8 (Queen slot), Rooks a1,h1, Bishops c1,f1, Knights b1,g1, Pawns a2–h2.
 
@@ -140,22 +140,31 @@ Quick identities and primary win lanes:
 **Herald**
 
 - Moves one square in any direction (like a king). **Cannot capture.**
-- **Not royal** — never in check, cannot be checkmated — but **can be captured normally.** It is the keystone of the army, not a king.
+- **Not royal** — never in check, cannot be checkmated — but **can be captured normally.** It is the keystone of the army, not a king. (One protection: it cannot be *teleport*-captured — see **No Executions** under The Veil.)
 
 **The Banner (aura)**
 
 - The Herald projects a **Banner** over its own square and the 8 squares orthogonally/diagonally adjacent to it (a 3×3 zone).
-- A friendly **Knight, Bishop, or Rook standing inside the Banner is Empowered.**
-- **Empowered — the phalanx parts (v2.2).** For an Empowered piece, **friendly pieces do not block movement**:
-  - An Empowered **Rook or Bishop slides straight through friendly pieces** as if they weren't there. It may not *land* on a friendly square; enemy pieces still block (landing on the first one is a capture).
-  - An Empowered **Knight becomes a Nightrider**: its leap **repeats in a straight line** (b1→c3→d5→e7, …). Empty and friendly-occupied landing squares let the ride continue (it cannot land on a friendly square); the first enemy piece on a landing square is captured and ends the ride.
-- Empowerment applies to **everything the piece does**: movement, captures, giving check, and defending — an Empowered Rook behind its own pawn wall *attacks through it*. Because membership in the Banner is a single glance ("is it in the Herald's 3×3?"), there is no adjacency graph to track and no hidden discovered-check bookkeeping.
-- Empowerment is evaluated continuously from the **current board position**. A piece that leaves the Banner (or whose Herald is captured or moves away) reverts to its native movement immediately.
-- Pawns are never Empowered. A promoted Rook/Bishop/Knight is Empowered normally while in the Banner.
 
-> **v2.2 change.** Empowerment used to grant a bonus **king-step** (one square any direction). Playtesting found it boring and ~100 simulated games showed no empowerment-strength buff fixed the army — the design-notes diagnosis was that Accord needed "a way to break a king-safe wall," not more raw power. The phalanx rule is that fix: a turtled defense can no longer blockade the Accord out of the game, because the formation shoots through itself. (The legacy `king-step` and `queen` empowerment modes remain in the engine as experiment knobs.)
+**Concord (v2.3)**
 
-**Identity:** The Accord is the highest-skill army and the clearest expression of the Counterplay Principle: its power is enormous when 3–5 pieces are packed around the mobile Herald — the formation literally *parts to strike through itself* — but it is a slow phalanx: to attack across the board a piece must leave the Banner and revert, and the **Herald itself is capturable.** The entire structure collapses the moment the keystone falls, so the opponent always has a target. The Accord wants to avoid trades and advance its formation intact (a natural midline-escort army).
+- Friendly **Knights, Bishops, and Rooks inside the Banner move in Concord**: each may move and capture using the native movement of **any** of them. A Rook and Bishop sharing the Banner both move as Queens; add a Knight and all three may also leap.
+- Normal blocking rules apply to every pooled move (a Bishop borrowing a Rook's slide is blocked exactly as a Rook would be).
+- Concord applies to **everything the piece does**: movement, captures, giving check, and defending. It is evaluated continuously from the **current board position** — a piece that leaves the Banner, or whose Herald is captured or moves away, reverts to its native movement immediately. One glance at the 3×3 answers everything.
+- **A lone piece in the Banner gains nothing** — the power exists only as a formation.
+- Pawns take no part in Concord. The King and the Herald neither contribute nor receive.
+
+**The March (v2.3)**
+
+- As your move, the Herald may step one square to an empty square **and every friendly piece inside the Banner steps one square in the same direction with it.**
+- The column steps **from the front**: pieces farther along the march direction move first, so a piece may step into a square a marcher ahead of it just vacated.
+- A piece whose destination is occupied or off the board simply **holds formation** (it does not move; nothing is captured — the March never captures). A pawn holds rather than march onto the final rank.
+- The Herald itself must actually step, and at least one other piece must step with it — otherwise it is just a normal Herald move.
+- All usual legality applies: the march is illegal if it would leave your King in check.
+
+> **v2.3 change.** v2.2's phalanx Empowerment (slide-through-friendlies + the Nightrider) was balanced but read as confusing and played as flat. Concord replaces it with a rule that is stronger *together* and nothing *alone* — assembling and protecting the formation is the army — and the March finally makes the phalanx advance like one: up to nine pieces step in a single move, non-capturing, herald-led, and instantly broken by a check or a dead Herald.
+
+**Identity:** The Accord is the highest-skill army and the clearest expression of the Counterplay Principle: its power is enormous when 3–5 pieces are packed around the mobile Herald — Knights slide, Rooks leap, and the whole formation rolls downboard behind the standard — but it is a slow phalanx: a piece that leaves the Banner reverts, a March captures nothing, and the **Herald itself is capturable.** The entire structure collapses the moment the keystone falls, so the opponent always has a target. The Accord wants to avoid trades and advance its formation intact (a natural midline-escort army).
 
 -----
 
@@ -203,13 +212,14 @@ Quick identities and primary win lanes:
 **Wraith**
 
 - **Movement:** as its move, the Wraith may either (a) move as a **Queen** (orthogonal/diagonal, blocked by pieces), or (b) **teleport to any unoccupied square** on the board.
-- **Capturing — costs Essence:** the Wraith may capture by moving as a Queen onto a target, **or** by teleporting onto any occupied enemy square anywhere on the board. **Every Wraith capture costs 1 Essence.**
+- **Capturing — costs Essence:** the Wraith may capture by moving as a Queen onto a target, **or** by teleporting onto an occupied enemy square anywhere on the board. **Every Wraith capture costs 1 Essence.**
+- **No Executions (v2.3):** a **teleport-capture may not target a royal piece or any Queen-slot piece** — King, Warlord, Queen, Shade, Herald, Apex, or an enemy Wraith. Those pieces remain capturable by every ordinary move, including the Wraith's own queen-line capture; they just cannot be assassinated from across the board. (Global teleport-decapitation of an army's keystone — killing the Herald on move one — was legal before this rule and simply not fun.)
 - **Check — gated by Essence (new):** while the Veil has **≥1 Essence**, the Wraith **gives check as a Queen** (line of sight along ranks/files/diagonals) and can deliver checkmate. At **0 Essence the Wraith is inert** — it cannot capture and **gives no check**; it may only teleport to or move onto empty squares (effectively a third Wisp).
 - **Subject to the Behemoth's Armor** (see The Wild): the Wraith may capture a Behemoth only if the square it occupies *before* moving/teleporting is within 2 (Chebyshev) of the Behemoth's current square.
 
 **Wisps**
 
-- As their move, teleport to any unoccupied square, or move as a Rook's single step is **not** granted — a Wisp may **only teleport to an empty square.**
+- As its move, a Wisp **teleports to any empty square.** That is its only move — it has no Rook slide or step.
 - **Cannot capture.**
 - **Can be captured normally** (Counterplay Principle — v1's uncapturable Wisp is removed).
 - Do not give check; they block movement and occupy space (including obstructing an enemy king's invasion path).
@@ -259,24 +269,17 @@ Quick identities and primary win lanes:
 
 ## Promotion
 
-**Universal rule.** A pawn (or Thrall) reaching the opponent's first rank promotes to a standard FIDE **Queen, Rook, Bishop, or Knight** — never an army-specific piece.
+**Reinforcement (v2.3).** A pawn (or Thrall) reaching the opponent's first rank promotes to **one of its own army's back-rank pieces** — the actual piece, with all its army abilities. A Veil pawn can become a Wraith or a Wisp; an Accord pawn can restore a fallen Herald; a Wild pawn can raise a new Behemoth. There is nothing else to remember: the promoted piece *is* that piece, in every rule of the game.
 
-**Replacement only.** A pawn may only promote to a piece type currently below its army's starting count for that slot. Slot mappings:
+**Replacement only.** A slot must be **below its starting count** to promote into it: one Queen-slot piece; two each of the Rook, Bishop, and Knight slots. All pieces of a slot currently on the board count toward the cap, however they got there. (Each army's pieces per slot are listed in its Composition line.)
 
-|Army   |Queen slot      |Rook slots|Bishop slots|Knight slots|
-|-------|----------------|----------|------------|------------|
-|Crown  |Queen           |Rook      |Bishop      |Knight      |
-|Phantom|Shade           |Rook      |Bishop      |Knight      |
-|Accord |Herald          |Rook      |Bishop      |Knight      |
-|Twins  |Warlord (d-file)|Rook      |Bishop      |Knight      |
-|Veil   |Wraith          |Wisp      |Bishop      |Knight      |
-|Wild   |Apex            |Behemoth  |Stalker     |Bronco      |
+**Crown exception — Royal Abundance.** The Crown may always promote to a **Queen** regardless of how many Queens it has. All other Crown slots, and all slots for every other army, obey replacement-only.
 
-A promoted piece is always a standard FIDE piece with no army abilities (a promoted Veil Rook does not teleport; a promoted Wild Bishop has no Strike-and-Return; an Empowered-eligible promoted Accord piece *does* gain the Banner like any Rook/Bishop/Knight).
-
-**Crown exception.** The Crown may always promote to a **Queen** regardless of how many Queens it has (Royal Abundance). All other Crown slots, and all slots for every other army, obey replacement-only.
+**Twins.** Warlords are royal and never leave the board, so the Twins' Queen slot is never open — Twins promote only to Rook, Bishop, or Knight.
 
 **Blocked pawn.** If no promotion slot is open, a pawn may neither push nor capture onto the back rank (both are promotion moves and are illegal in that state). It is stuck on the 7th rank until a slot frees up (e.g., a Bronco/Behemoth self-capture or any trade), retaining all other pawn functions meanwhile.
+
+> **v2.3 change.** Promotion used to create a standard FIDE piece with "no army abilities" — four stacked rules, a slot table, and the game's only invisible state (a promoted Wisp-slot Rook *looked* like a Wisp but moved like a Rook). Reinforcement deletes all of it: promotion now restores exactly what the army lost, the board is fully readable at a glance, and promotion becomes a comeback mechanic instead of a budget leak.
 
 -----
 
@@ -304,8 +307,9 @@ Standard algebraic, with extensions.
 |B     |Bishop|Bishop |Bishop|Bishop |Bishop|Stalker |
 |N     |Knight|Knight |Knight|Knight |Knight|Bronco  |
 
-- **Promoted pieces:** `^Q ^R ^B ^N` (e.g., `e8=^Q`).
-- **Empowered move (Accord):** no special mark needed — legality is read from the Herald's Banner; annotate with `*` if disambiguation helps (`R*d4`).
+- **Promotion:** plain FIDE-style `=Q =R =B =N` (e.g., `e8=Q`) — the letter names the slot, so it reads as the army's piece (`e8=Q` for Veil is a new Wraith). The pre-v2.3 `=^Q` form is accepted when reading old game text.
+- **Concord move (Accord):** no special mark needed — legality is read from the Herald's Banner; annotate with `*` if disambiguation helps (`R*d4`).
+- **March (Accord):** `Q>` + the Herald's destination (`Q>d5`); the column's steps are derived from the board.
 - **Twins:** Rally appended after `;` (`Nc6;Kf1`); Shatter as `@` (`K@e4`).
 - **Veil:** Wraith captures show Essence change (`Qxe5(E:2→1)`); minor-piece pawn captures that gain Essence (`Nxd5(E:1→2)`); a Wraith **check** while gated is just `+` — note `(E:n)` only when the value changes.
 - **Wild:** Behemoth rampage notes the final square (`Rxa4`); a Stalker that becomes Exhausted may be marked `~` (`Bxe6~`).
@@ -336,7 +340,7 @@ The two prior extremes converge: the Veil loses its passive wall (Wisps capturab
 
 **4 — Less hidden bookkeeping.** v1 asked players to recompute an adjacency graph every move (Accord linking), including for check — a landmine for discovered checks and a non-starter for async play. v2.0 replaces it with the **Banner aura**: a single 3×3 zone you read at a glance, with the Herald promoted from a near-useless blocker to the army's capturable keystone. Behemoth Armor is already position-based (board-readable) from v1.2.
 
-Retained from earlier versions: the midline-invasion / stalemate-loss engine (the soul of the game), perfect information, FIDE-only replacement promotion, and the Twins one-action-per-check rule (a principled invariant, not a hack).
+Retained from earlier versions: the midline-invasion / stalemate-loss engine (the soul of the game), perfect information, replacement promotion (FIDE-only until v2.3's Reinforcement, which kept the caps and changed the target to the army's own pieces), and the Twins one-action-per-check rule (a principled invariant, not a hack).
 
 **Simulation findings (v2.0.1 — coarse AI self-play, ~30 games, 10 per army).** A faithful engine for all six armies and both win conditions was built and played round-robin by a depth-2 alpha-beta AI with a forcing-line (check) extension. Treat the numbers as *directional*, not precise: the search is shallow, the evaluation is simple, and 10 games per army leaves wide error bars (a single matchup is two games). With those caveats:
 
@@ -353,6 +357,15 @@ Retained from earlier versions: the midline-invasion / stalemate-loss engine (th
 -----
 
 ## Changelog
+
+### v2.3 — Parsimony Pass: Reinforcement, Concord & the March
+
+A pass over the two rules players found most confusing — promotion and the Accord's Nightrider — with the same instruction as v2.2: err toward fun. Three rules changed.
+
+- **Promotion — Reinforcement (all armies).** A pawn now promotes to **its own army's piece** for any open slot, abilities and all, instead of a "standard FIDE piece with no army abilities." Replacement-only caps, Royal Abundance, and the blocked-pawn rule are unchanged. This deletes the slot-mapping table, the no-abilities clause, the `^` notation, and the game's only invisible state (the engine's `promoted` flag — which SFEN-X never round-tripped); it turns promotion into a comeback mechanic (rebuild your Shade, Wraith, or Herald) and makes it budget-exact (a dead Wisp comes back as a Wisp, not a free upgrade to a full Rook).
+- **Accord — Concord + the March (replaces phalanx Empowerment and the Nightrider).** Knights, Bishops, and Rooks inside the Banner now **pool their movement** — each may move as any of them (R+B in the Banner are both Queens; add an N and all three leap) — and the Herald can lead a **March**: the whole formation steps one square with it, column-from-the-front, blocked pieces holding, capturing nothing. A lone piece in the Banner gains nothing: the power exists only as a formation. The v2.2 slide-through-friendlies and the Nightrider are gone (the Nightrider read as the most confusing rule in the game); own pawns block normally again.
+- **Veil — No Executions.** The Wraith's teleport-capture may no longer target a royal or **any Queen-slot piece** (Queen, Shade, Herald, Apex, enemy Wraith). Queen-line captures of those pieces stay legal. Closes the turn-one global decapitation of the Accord's Herald — now even more load-bearing under Concord — and the equivalent snipe of every army's signature piece. One knock-on: a Shade's piercing check can no longer be answered by teleport-capturing the Shade (line-capture, king move, Strike, rampage, and Shatter all still work).
+- **Balance watch:** Concord + Herald recovery is a deliberate double buff to the roster's weakest-testing army; R+B+N packed in one Banner are three amazon-movers around a slow, capturable, non-capturing keystone. Flagged for human playtest.
 
 ### v2.2 — Balance Pass: Fun First
 

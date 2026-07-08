@@ -25,10 +25,11 @@ const VEIL_SFEN = '7k/4r3/8/8/2Q5/8/8/K7/w/Veil,Crown/-/-/2,0/-/0/1';
 // White King at a1(0). Black to move → opponentArmy = 'Phantom' → hint bar shows.
 const PHANTOM_SFEN = '4k3/8/4Q3/8/8/4r3/8/K7/b/Phantom,Crown/-/-/0,0/-/0/1';
 
-// Accord: White Herald(Q-slot) at d4(27), White Knight(N-slot) at e5(36).
-// Knight is within Chebyshev-1 of Herald → Empowered (gains king-step bonus moves).
+// Accord: White Herald(Q-slot) at d4(27), White Rook(R-slot) at d5(35) and
+// Knight(N-slot) at e5(36) — two distinct slots in the Banner, so the Concord
+// pool grants both pieces the other's movement (v2.3).
 // Black King at h8(63), White King at a1(0). White to move.
-const ACCORD_SFEN = '7k/8/8/4N3/3Q4/8/8/K7/w/Accord,Crown/-/-/0,0/-/0/1';
+const ACCORD_SFEN = '7k/8/8/3RN3/3Q4/8/8/K7/w/Accord,Crown/-/-/0,0/-/0/1';
 
 // Wild — Rampage: White Behemoth(R-slot) at d4(27). Black Crown rooks at
 // e4(28) and f4(29) — both within Chebyshev-2 of d4 so the armor-wall rule
@@ -164,34 +165,57 @@ test.describe('Phantom — piercing check', () => {
 // Accord — empowered Knight in Banner zone
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('Accord — empowered Knight in Banner zone', () => {
+test.describe('Accord — Concord and the March (v2.3)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(sfenUrl(ACCORD_SFEN));
     await expect(page.getByText('White to move')).toBeVisible({ timeout: 5000 });
   });
 
-  test('Knight within Herald banner zone shows empowered badge', async ({ page }) => {
-    // Knight at e5 (sq 36) is Chebyshev-1 from Herald at d4 (sq 27) → empowered
+  test('N/B/R pieces sharing the Banner show the Concord badge', async ({ page }) => {
+    // Knight at e5 (sq 36) and Rook at d5 (sq 35) share the Banner → in Concord
     await expect(page.locator('[data-sq="36"] [data-empowered="true"]')).toBeVisible();
+    await expect(page.locator('[data-sq="35"] [data-empowered="true"]')).toBeVisible();
   });
 
-  test('empowered Knight has more than 8 legal destinations', async ({ page }) => {
+  test('Knight in Concord with a Rook has more than 8 legal destinations', async ({ page }) => {
     await page.click('[data-sq="36"]');
 
-    // Standard Knight has ≤ 8 moves; the Nightrider rides add extended destinations
+    // Native Knight has ≤ 8 moves; the pooled rook slides add extended destinations
     const destCount = await page.locator('[data-sq].hl-move, [data-sq].hl-capture').count();
     expect(destCount).toBeGreaterThan(8);
   });
 
-  test('empowered Knight can execute a Nightrider ride', async ({ page }) => {
+  test('Knight in Concord can execute a rook slide', async ({ page }) => {
     await page.click('[data-sq="36"]');
 
-    // g1 (sq 6) is two knight-leaps from e5 along (-2,+1) via empty f3 —
-    // an empowered Nightrider ride, not a native knight move -> hl-move
-    await expect(page.locator('[data-sq="6"]')).toHaveClass(/hl-move/);
+    // e1 (sq 4) is straight down the e-file from e5 — a pooled rook slide,
+    // not a native knight move -> hl-move
+    await expect(page.locator('[data-sq="4"]')).toHaveClass(/hl-move/);
 
-    await page.click('[data-sq="6"]');
+    await page.click('[data-sq="4"]');
     await expect(page.getByText('Black to move')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('the Herald leads a March: chooser offers it, preview lists the column, formation steps', async ({ page }) => {
+    // Select the Herald at d4 (sq 27) and tap c4 (sq 26) — an empty square that is
+    // both a plain Herald step and a March destination → chooser appears.
+    await page.click('[data-sq="27"]');
+    await page.click('[data-sq="26"]');
+    await expect(page.getByTestId('turn-chooser')).toBeVisible();
+
+    // Pick the March option
+    await page.getByText('March', { exact: true }).click();
+    await expect(page.getByTestId('march-preview')).toBeVisible();
+    // The Rook at d5 (sq 35) is in the column
+    await expect(page.getByTestId('march-step-35')).toBeVisible();
+
+    await page.click('[data-testid="march-confirm"]');
+    await expect(page.getByText('Black to move')).toBeVisible({ timeout: 5000 });
+
+    // The formation stepped west: Herald d4→c4 (26), Rook d5→c5 (34), Knight e5→d5 (35)
+    await expect(page.locator('[data-sq="26"] [data-slot="Q"]')).toBeVisible();
+    await expect(page.locator('[data-sq="34"] [data-slot="R"]')).toBeVisible();
+    await expect(page.locator('[data-sq="35"] [data-slot="N"]')).toBeVisible();
   });
 });
 

@@ -5,7 +5,7 @@ import { Board } from '../../src/ui/components/Board';
 import { ShatterPreview } from '../../src/ui/components/ShatterPreview';
 import { RampagePreview } from '../../src/ui/components/RampagePreview';
 import { initialState, legalTurns, parseSfen, algebraicToSquare } from '../../src/engine';
-import { bannerZone } from '../../src/engine/accord';
+import { bannerZone, concordPool } from '../../src/engine/accord';
 import type { GameState, RampageMove, Turn } from '../../src/engine/types';
 import {
   buildHighlightMap,
@@ -258,7 +258,9 @@ describe('RampagePreview', () => {
 describe('Veil: slide vs teleport highlight', () => {
   // White Veil Wraith at c4 (sq26), Black Crown King at h8, White King at a1,
   // Black rook at c7 (sq50). Essence W=2.
-  const VEIL_SFEN = '7k/2r5/8/8/2Q5/8/8/K7/w/Veil,Crown/-/-/2,0/-/0/1';
+  // Black pawn g5 sits off the Wraith's queen lines from c4, so capturing it
+  // requires a teleport. (Royals and Q-slot pieces are teleport-immune in v2.3.)
+  const VEIL_SFEN = '7k/2r5/8/6p1/2Q5/8/8/K7/w/Veil,Crown/-/-/2,0/-/0/1';
 
   it('Wraith slide destinations get hl-move class, not hl-teleport-move', () => {
     const state = parseSfen(VEIL_SFEN);
@@ -454,23 +456,24 @@ describe('Wild: Exhausted Stalker badge', () => {
 
 // ─── Accord: Banner zone and empowered badge ─────────────────────────────
 
-describe('Accord: empowered badge', () => {
-  // White Accord: King at a1, Herald at d4 (sq27), Knight at e5 (sq36). Black Crown King at h8.
-  const ACCORD_SFEN = '7k/8/8/4N3/3Q4/8/8/K7/w/Accord,Crown/-/-/0,0/-/0/1';
+describe('Accord: Concord badge', () => {
+  // White Accord: King a1, Herald d4, Rook d5 + Knight e5 (both in the Banner —
+  // two distinct slots, so the Concord pool grants something). Black Crown King h8.
+  const ACCORD_SFEN = '7k/8/8/3RN3/3Q4/8/8/K7/w/Accord,Crown/-/-/0,0/-/0/1';
 
-  it('Board shows data-empowered on pieces in Banner zone', () => {
+  it('Board shows data-empowered on N/B/R pieces sharing the Banner', () => {
     const state = parseSfen(ACCORD_SFEN);
-    const knightSq = algebraicToSquare('e5'); // sq36, in Banner zone of d4 Herald
+    const knightSq = algebraicToSquare('e5');
 
-    // Compute empowered set (mimics what GameScreen does)
-    const zone = bannerZone(state.board, 'W');
+    // Compute the Concord set (mimics what GameScreen does)
     const empoweredSquares = new Set<number>();
-    for (const sq of zone) {
-      const piece = state.board[sq];
-      if (!piece || piece.color !== 'W') continue;
-      if (piece.slot === 'P') continue;
-      if (piece.slot === 'Q' && !piece.promoted) continue;
-      empoweredSquares.add(sq);
+    const pool = concordPool(state.board, 'W');
+    if (pool.size >= 2) {
+      for (const sq of bannerZone(state.board, 'W')) {
+        const piece = state.board[sq];
+        if (!piece || piece.color !== 'W') continue;
+        if (piece.slot === 'N' || piece.slot === 'B' || piece.slot === 'R') empoweredSquares.add(sq);
+      }
     }
 
     expect(empoweredSquares.has(knightSq)).toBe(true);
@@ -492,14 +495,13 @@ describe('Accord: empowered badge', () => {
     expect(knightCell?.querySelector('[data-empowered="true"]')).toBeTruthy();
   });
 
-  it('Empowered Knight has more moves than standard Knight', () => {
+  it('a Knight in Concord with a Rook has more moves than a standard Knight', () => {
     const state = parseSfen(ACCORD_SFEN);
     const legal = legalTurns(state);
     const knightSq = algebraicToSquare('e5');
 
     const knightMoves = legal.filter(t => getPrimaryFrom(t) === knightSq);
-    // Normal Knight at e5 has up to 8 moves; empowered gains king-step bonus
-    // Total should exceed 8 standard knight moves
+    // Native knight at e5 has 8 jumps; the pooled rook slides push it well past that.
     expect(knightMoves.length).toBeGreaterThan(8);
   });
 });
