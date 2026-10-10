@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Army, Color, Turn } from '../engine/types';
-import { parseSfen, serializeSfen } from '../engine';
-import { replayGame } from '../engine/notation';
-import { appendTurn, decodePayload, validatePayload } from '../pbm/index';
+import { parseSfen } from '../engine';
+import { appendTurn, decodePayload, revealArmy, validatePayload } from '../pbm/index';
 import type { PBMPayload, ValidationError } from '../pbm/types';
-import { transport, checkMonotonicGuard, createLocalPayload, generateId } from '../app/transport';
+import {
+  transport,
+  checkMonotonicGuard,
+  createLocalPayload,
+  generateId,
+  isOlderPhase,
+  persistGame,
+} from '../app/transport';
+import type { LocalGameMeta } from '../app/transport';
 import { browserHasher } from '../app/hasher';
-import { revealArmy } from '../pbm/index';
 
 import { HomeScreen } from './screens/HomeScreen';
+import type { ContinueInfo } from './screens/HomeScreen';
 import { NewGameScreen } from './screens/NewGameScreen';
 import { GameScreen } from './screens/GameScreen';
 import { GamesListScreen } from './screens/GamesListScreen';
@@ -21,198 +28,278 @@ import { SaltMissingScreen } from './screens/SaltMissingScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
 import { RulesScreen } from './screens/RulesScreen';
 
+interface GameScreenState {
+  type: 'game';
+  gameId: string;
+  armyW: Army;
+  armyB: Army;
+  /** SAN list to rebuild the game from (empty for a fresh game). */
+  moves: readonly string[];
+  /** DEV `?sfen=` loader only. */
+  initialSfen?: string;
+  /** PBM: the local player's color. Absent for hotseat. */
+  myColor?: Color;
+  opponentLabel?: string;
+}
+
+interface ShareState {
+  payload: PBMPayload;
+  title: string;
+  subtitle?: string;
+  /** Text sent along with the link, addressed to the recipient. */
+  message?: string;
+  onDone: () => void;
+  onBackToGame?: () => void;
+}
+
 type Screen =
   | { type: 'home' }
   | { type: 'new-game' }
-  | { type: 'game'; gameId: string; armyW: Army; armyB: Army; initialSfen?: string }
+  | GameScreenState
   | { type: 'games-list' }
   | { type: 'pbm-create' }
   | { type: 'pbm-respond'; payload: PBMPayload }
-  | { type: 'pbm-game'; gameId: string; myColor: Color; armyW: Army; armyB: Army; initialSfen?: string }
+  | { type: 'loading' }
   | { type: 'import'; preloaded?: string }
-  | { type: 'import-error'; error: ValidationError | string }
+  | { type: 'import-error'; error: ValidationError | string; raw?: string }
   | { type: 'conflict'; stored: PBMPayload; incoming: PBMPayload }
   | { type: 'salt-missing'; gameId: string; payload: PBMPayload }
   | { type: 'replay'; gameId: string }
-  | { type: 'share'; payload: PBMPayload; title: string; subtitle?: string; onDone: () => void; onBackToGame?: () => void };
+  | ({ type: 'share' } & ShareState);
 
-// Derive game screen from payload after update (for refresh-resume)
-function buildPBMGameScreen(
-  gameId: string,
-  payload: PBMPayload,
-  myColor: Color,
-): Extract<Screen, { type: 'pbm-game' }> | null {
-  const wArmy = payload.armies.W;
-  const bArmy = payload.armies.B;
-  if (!wArmy || !bArmy) return null;
+const CHALLENGE_MESSAGE = "I challenge you! My army is sealed — open this to pick yours:";
+const RESPONSE_MESSAGE = "I've picked my army — open this to reveal yours and start the game:";
 
-  // Replay to get current state SFEN
-  const movePairs: Array<{ white: string; black?: string }> = [];
-  for (let i = 0; i < payload.moves.length; i += 2) {
-    movePairs.push({ white: payload.moves[i], black: payload.moves[i + 1] });
+const LAST_GAME_KEY = 'lastGameId';
+// Pre-1.3 sessions stored these; still honoured so an upgrade resumes cleanly.
+const LEGACY_LAST_GAME_KEYS = ['lastLocalGameId', 'lastPBMGameId'];
+
+function sessionGet(key: string): string | null {
+  try { return sessionStorage.getItem(key); } catch { return null; }
+}
+function sessionSet(key: string, value: string): void {
+  try { sessionStorage.setItem(key, value); } catch { /* resume just won't work */ }
+}
+
+/** Drop a consumed `#g=` / `#rules` fragment so a refresh doesn't replay it. */
+function consumeHash(): void {
+  if (!window.location.hash) return;
+  history.replaceState(history.state, '', window.location.pathname + window.location.search);
+}
+
+function rulesAnchorFromHash(hash: string): string | undefined {
+  return hash.slice('#rules'.length).replace(/^\//, '') || undefined;
+}
+
+function opponentLabelOf(payload: PBMPayload, myColor: Color): string {
+  return (myColor === 'W' ? payload.black.label : payload.white.label) || 'your opponent';
+}
+
+/** The most recently touched unfinished game, for the Home screen's Continue button. */
+function findContinueGame(): ContinueInfo | null {
+  let best: { id: string; payload: PBMPayload; meta: LocalGameMeta } | null = null;
+  for (const { id, payload } of transport.listGames()) {
+    if (payload.phase !== 'play') continue;
+    const meta = transport.loadMeta(id);
+    if (!meta || !payload.armies.W || !payload.armies.B) continue;
+    if (!best || (meta.updatedAt ?? 0) > (best.meta.updatedAt ?? 0)) best = { id, payload, meta };
   }
-  const record = { armies: { W: wArmy as Army, B: bArmy as Army }, moves: movePairs };
-  const result = replayGame(record);
-  const initialSfen = ('moveNumber' in result)
-    ? undefined
-    : serializeSfen(result.finalState);
-
-  return { type: 'pbm-game', gameId, myColor, armyW: wArmy as Army, armyB: bArmy as Army, initialSfen };
+  if (!best) return null;
+  const { id, payload, meta } = best;
+  const toMove: Color = payload.moves.length % 2 === 0 ? 'W' : 'B';
+  const detail = meta.isLocal
+    ? `${toMove === 'W' ? 'White' : 'Black'} to move · move ${Math.floor(payload.moves.length / 2) + 1}`
+    : toMove === meta.myColor
+      ? `Your move vs ${opponentLabelOf(payload, meta.myColor)}`
+      : `Waiting on ${opponentLabelOf(payload, meta.myColor)}`;
+  return { gameId: id, armyW: payload.armies.W!, armyB: payload.armies.B!, detail, isLocal: !!meta.isLocal };
 }
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
 
-  // Track the current payload for persistence (local and PBM games)
+  // The payload behind the current game screen (local and PBM games alike)
   const currentPayloadRef = useRef<PBMPayload | null>(null);
-  // Rules overlay (shown on top of any screen without losing state)
-  const [rulesOverlay, setRulesOverlay] = useState<{ anchor?: string } | null>(null);
+  // Bumped to force a fresh GameScreen even for the same game id (rematch, re-open)
+  const [gameNonce, setGameNonce] = useState(0);
+  // Rules overlay (shown on top of any screen without unmounting it)
+  const [rules, setRules] = useState<{ anchor?: string } | null>(null);
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
   // Share overlay for PBM games (shown on top of GameScreen)
-  const [shareOverlay, setShareOverlay] = useState<{
-    payload: PBMPayload; title: string; subtitle?: string;
-    onBackToGame?: () => void;
-  } | null>(null);
+  const [shareOverlay, setShareOverlay] = useState<ShareState | null>(null);
+  const shareOverlayRef = useRef(shareOverlay);
+  shareOverlayRef.current = shareOverlay;
 
-  // ── Hash-change routing (handles paste-URL-while-app-is-running) ─────────────
-  useEffect(() => {
-    function handleHashChange() {
-      const hash = window.location.hash;
-      if (hash.startsWith('#g=')) {
-        setShareOverlay(null);
-        setRulesOverlay(null);
-        setScreen({ type: 'import', preloaded: hash.slice(3) });
-      } else if (hash.startsWith('#rules')) {
-        const anchor = hash.slice('#rules'.length).replace(/^\//, '') || undefined;
-        setRulesOverlay({ anchor });
-      }
-    }
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+  // ── Browser back button ──────────────────────────────────────────────────────
+  // One history entry stands for "away from home" and one for an open overlay, so
+  // Android/browser Back closes the overlay, then returns home, then leaves.
+  // After a reload the current entry may already be ours (history.state survives it).
+  const screenEntryRef = useRef(
+    typeof history !== 'undefined' && (history.state as { schism?: string } | null)?.schism === 'screen',
+  );
+  const overlayEntryRef = useRef(false);
+  const ignorePopsRef = useRef(0);
+
+  const pushEntry = useCallback((kind: 'screen' | 'overlay') => {
+    history.pushState({ schism: kind }, '', window.location.pathname + window.location.search);
   }, []);
 
-  // ── Startup: initial URL routing + session resume ──────────────────────────
+  const popOwnEntry = useCallback(() => {
+    ignorePopsRef.current++;
+    history.back();
+  }, []);
+
+  const openRules = useCallback((anchor?: string) => {
+    if (!overlayEntryRef.current) {
+      pushEntry('overlay');
+      overlayEntryRef.current = true;
+    }
+    setRules({ anchor: anchor || undefined });
+  }, [pushEntry]);
+
+  const closeRules = useCallback(() => {
+    setRules(null);
+    if (overlayEntryRef.current) {
+      overlayEntryRef.current = false;
+      popOwnEntry();
+    }
+  }, [popOwnEntry]);
+
   useEffect(() => {
-    const hash = window.location.hash;
+    if (screen.type !== 'home' && !screenEntryRef.current) {
+      pushEntry('screen');
+      screenEntryRef.current = true;
+    } else if (screen.type === 'home' && screenEntryRef.current && !overlayEntryRef.current) {
+      screenEntryRef.current = false;
+      popOwnEntry();
+    }
+  }, [screen.type, pushEntry, popOwnEntry]);
 
-    // DEV: ?sfen= loader
-    if (import.meta.env.DEV) {
-      const params = new URLSearchParams(window.location.search);
-      const sfenParam = params.get('sfen');
-      if (sfenParam) {
-        try {
-          const state = parseSfen(sfenParam);
-          const gameId = generateId();
-          setScreen({ type: 'game', gameId, armyW: state.armies.W, armyB: state.armies.B, initialSfen: sfenParam });
-          return;
-        } catch {
-          console.warn('[dev] Invalid ?sfen= parameter — ignoring.');
-        }
+  useEffect(() => {
+    function onPopState() {
+      if (ignorePopsRef.current > 0) { ignorePopsRef.current--; return; }
+      if (window.location.hash.startsWith('#g=')) return; // a pasted link: hashchange routes it
+      if (rulesRef.current) {
+        overlayEntryRef.current = false;
+        setRules(null);
+        return;
       }
+      screenEntryRef.current = false;
+      if (shareOverlayRef.current) setShareOverlay(null);
+      if (screenRef.current.type !== 'home') setScreen({ type: 'home' });
     }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
-    // #rules link: show as overlay
-    if (hash.startsWith('#rules')) {
-      const anchor = hash.slice('#rules'.length).replace(/^\//, '') || undefined;
-      setRulesOverlay({ anchor });
+  // ── Routing a stored game by its phase ──────────────────────────────────────
+
+  const showGame = useCallback((gameId: string, payload: PBMPayload, meta: LocalGameMeta) => {
+    const armyW = payload.armies.W, armyB = payload.armies.B;
+    if (!armyW || !armyB) { setScreen({ type: 'games-list' }); return; }
+    currentPayloadRef.current = payload;
+    sessionSet(LAST_GAME_KEY, gameId);
+    setShareOverlay(null);
+    setGameNonce(n => n + 1);
+    setScreen({
+      type: 'game',
+      gameId,
+      armyW,
+      armyB,
+      moves: payload.moves,
+      myColor: meta.isLocal ? undefined : meta.myColor,
+      opponentLabel: meta.isLocal ? undefined : opponentLabelOf(payload, meta.myColor),
+    });
+  }, []);
+
+  const autoReveal = useCallback(async (payload: PBMPayload, meta: LocalGameMeta) => {
+    if (!meta.commit) return;
+    const gameId = payload.gameId;
+    let playPayload: PBMPayload;
+    try {
+      playPayload = await revealArmy(payload, meta.commit.army, meta.commit.salt, browserHasher);
+    } catch {
+      setScreen({ type: 'import-error', error: 'Hash mismatch during auto-reveal. Salt or army may be corrupted.' });
       return;
     }
+    // Clear the salt now that the reveal is public
+    persistGame(gameId, playPayload, { myColor: meta.myColor, commit: undefined });
+    const playMeta: LocalGameMeta = { myColor: meta.myColor };
+    const goToGame = () => showGame(gameId, playPayload, playMeta);
+    setScreen({
+      type: 'share',
+      payload: playPayload,
+      title: 'Share to start the game',
+      subtitle: `${playPayload.armies.W} vs ${playPayload.armies.B} — send this to your opponent`,
+      message: `Armies revealed: ${playPayload.armies.W} vs ${playPayload.armies.B}. Open to see the board:`,
+      onDone: goToGame,
+      onBackToGame: goToGame,
+    });
+  }, [showGame]);
 
-    // #g= link: go to import flow
-    if (hash.startsWith('#g=')) {
-      const encoded = hash.slice(3);
-      setScreen({ type: 'import', preloaded: encoded });
-      return;
-    }
+  /** Open whatever a stored game needs next: share, respond, reveal, play, or watch. */
+  const openGame = useCallback((gameId: string) => {
+    const payload = transport.loadGame(gameId);
+    const meta = transport.loadMeta(gameId);
+    if (!payload) { setScreen({ type: 'games-list' }); return; }
 
-    // Session resume: try to restore last active game
-    const lastLocalId = sessionStorage.getItem('lastLocalGameId');
-    if (lastLocalId) {
-      const payload = transport.loadGame(lastLocalId);
-      if (payload && payload.phase !== 'finished' && payload.armies.W && payload.armies.B) {
-        const meta = transport.loadMeta(lastLocalId);
-        if (meta?.isLocal) {
-          const movePairs: Array<{ white: string; black?: string }> = [];
-          for (let i = 0; i < payload.moves.length; i += 2) {
-            movePairs.push({ white: payload.moves[i], black: payload.moves[i + 1] });
-          }
-          const record = {
-            armies: { W: payload.armies.W as Army, B: payload.armies.B as Army },
-            moves: movePairs,
-          };
-          const replayResult = replayGame(record);
-          const initialSfen = ('moveNumber' in replayResult)
-            ? undefined
-            : serializeSfen(replayResult.finalState);
-          currentPayloadRef.current = payload;
+    switch (payload.phase) {
+      case 'commit':
+        if (meta?.commit) {
           setScreen({
-            type: 'game',
-            gameId: lastLocalId,
-            armyW: payload.armies.W as Army,
-            armyB: payload.armies.B as Army,
-            initialSfen,
+            type: 'share',
+            payload,
+            title: 'Share your challenge',
+            subtitle: 'Send this link to your opponent',
+            message: CHALLENGE_MESSAGE,
+            onDone: () => setScreen({ type: 'games-list' }),
           });
-          return;
+        } else {
+          setScreen({ type: 'pbm-respond', payload });
         }
-      }
-    }
-
-    const lastPBMId = sessionStorage.getItem('lastPBMGameId');
-    if (lastPBMId) {
-      const payload = transport.loadGame(lastPBMId);
-      const meta = transport.loadMeta(lastPBMId);
-      if (payload && meta && !meta.isLocal && (payload.phase === 'play' || payload.phase === 'finished')) {
-        const gameScreen = buildPBMGameScreen(lastPBMId, payload, meta.myColor);
-        if (gameScreen) {
-          currentPayloadRef.current = payload;
-          setScreen(gameScreen);
-          return;
+        return;
+      case 'reveal':
+        if (meta && meta.myColor !== payload.commit.by) {
+          // We responded; the challenger hasn't revealed yet. Offer our link again.
+          setScreen({
+            type: 'share',
+            payload,
+            title: 'Send your response',
+            subtitle: 'Send this back to your opponent so they can reveal',
+            message: RESPONSE_MESSAGE,
+            onDone: () => setScreen({ type: 'games-list' }),
+          });
+        } else if (meta?.commit) {
+          void autoReveal(payload, meta);
+        } else {
+          setScreen({ type: 'salt-missing', gameId, payload });
         }
-      }
+        return;
+      case 'play':
+      case 'finished':
+        if (!meta) { setScreen({ type: 'replay', gameId }); return; } // a game we only watch
+        showGame(gameId, payload, meta);
+        return;
     }
-  }, []);
-
-  // ── Turn submitted handler (used by both local and PBM games) ──────────────
-  const handleTurnSubmitted = useCallback((turn: Turn) => {
-    const prev = currentPayloadRef.current;
-    if (!prev || prev.phase !== 'play') return;
-    const newPayload = appendTurn(prev, turn);
-    currentPayloadRef.current = newPayload;
-    transport.saveGame(newPayload.gameId, newPayload);
-
-    // PBM: show share overlay after each turn
-    if (screen.type === 'pbm-game') {
-      const { myColor, gameId, armyW, armyB } = screen;
-      const isFinished = newPayload.phase === 'finished';
-      const moveCount = newPayload.moves.length;
-      const moveNum = Math.ceil(moveCount / 2);
-      const title = isFinished ? 'Game over — share result' : `Share move ${moveNum}`;
-
-      setShareOverlay({
-        payload: newPayload,
-        title,
-        onBackToGame: isFinished ? undefined : () => {
-          setShareOverlay(null);
-          // Keep screen as pbm-game (GameScreen stays mounted, state preserved)
-          void { myColor, gameId, armyW, armyB };
-        },
-      });
-    }
-  }, [screen]);
+  }, [autoReveal, showGame]);
 
   // ── Import handler: decode, validate, route ────────────────────────────────
-  async function handleImport(encoded: string) {
-    // Decode
+  const handleImport = useCallback(async (encoded: string) => {
+    setShareOverlay(null);
+    setScreen({ type: 'loading' });
+
     const decoded = decodePayload(encoded);
     if ('error' in decoded) {
-      setScreen({ type: 'import-error', error: decoded.error });
+      setScreen({ type: 'import-error', error: decoded.error, raw: encoded });
       return;
     }
     const incoming = decoded;
-
-    // Validate
     const validation = await validatePayload(incoming, browserHasher);
     if (!validation.ok) {
-      setScreen({ type: 'import-error', error: validation.error });
+      setScreen({ type: 'import-error', error: validation.error, raw: encoded });
       return;
     }
 
@@ -220,433 +307,401 @@ export default function App() {
     const stored = transport.loadGame(gameId);
     const meta = transport.loadMeta(gameId);
 
-    // Monotonic guard
     if (stored) {
+      // An old link for a game that has moved on (e.g. the original challenge):
+      // keep what we have and show it.
+      if (isOlderPhase(stored, incoming)) { openGame(gameId); return; }
       if (!checkMonotonicGuard(stored, incoming)) {
         setScreen({ type: 'conflict', stored, incoming });
         return;
       }
     }
 
-    // Route by phase
     switch (incoming.phase) {
-      case 'commit': {
-        // Respondent receives the commit payload — go to respond flow
-        // (only if we haven't already responded, i.e. no stored meta)
-        if (meta) {
-          // Already have this game — show it
-          const gameScreen = buildPBMGameScreen(gameId, stored ?? incoming, meta.myColor);
-          if (gameScreen) {
-            currentPayloadRef.current = stored ?? incoming;
-            setScreen(gameScreen);
-          } else {
-            setScreen({ type: 'games-list' });
-          }
-          return;
-        }
-        transport.saveGame(gameId, incoming);
-        setScreen({ type: 'pbm-respond', payload: incoming });
+      case 'commit':
+        if (!meta) transport.saveGame(gameId, incoming); // respondent: no meta until they answer
+        openGame(gameId);
         return;
-      }
-
-      case 'reveal': {
-        // Committer receives the respond payload — auto-reveal
-        if (!meta?.commit) {
-          // Salt missing
-          transport.saveGame(gameId, incoming);
-          const opponentColor: Color = incoming.commit.by === 'W' ? 'B' : 'W';
-          const opponentLabel = opponentColor === 'W'
-            ? incoming.white.label
-            : incoming.black.label;
-          setScreen({ type: 'salt-missing', gameId, payload: incoming });
-          void opponentLabel;
-          return;
-        }
-        // Auto-reveal
-        const { army, salt } = meta.commit;
-        let playPayload: PBMPayload;
-        try {
-          playPayload = await revealArmy(incoming, army, salt, browserHasher);
-        } catch {
-          setScreen({ type: 'import-error', error: 'Hash mismatch during auto-reveal. Salt or army may be corrupted.' });
-          return;
-        }
-        // Clear salt from meta now that reveal is done
-        transport.saveMeta(gameId, { myColor: meta.myColor });
-        transport.saveGame(gameId, playPayload);
-        currentPayloadRef.current = playPayload;
-        sessionStorage.setItem('lastPBMGameId', gameId);
-        // Show share screen with play payload
-        const wArmy = playPayload.armies.W as Army;
-        const bArmy = playPayload.armies.B as Army;
-        setScreen({
-          type: 'share',
-          payload: playPayload,
-          title: 'Share to start the game',
-          subtitle: `${wArmy} vs ${bArmy} — send this to your opponent`,
-          onDone: () => {
-            const gs = buildPBMGameScreen(gameId, playPayload, meta.myColor);
-            if (gs) { currentPayloadRef.current = playPayload; setScreen(gs); }
-            else setScreen({ type: 'games-list' });
-          },
-          onBackToGame: () => {
-            const gs = buildPBMGameScreen(gameId, playPayload, meta.myColor);
-            if (gs) { currentPayloadRef.current = playPayload; setScreen(gs); }
-            else setScreen({ type: 'games-list' });
-          },
-        });
+      case 'reveal':
+        if (meta) persistGame(gameId, incoming);
+        else transport.saveGame(gameId, incoming);
+        openGame(gameId);
         return;
-      }
-
       case 'play':
-      case 'finished': {
-        // Update stored payload
-        transport.saveGame(gameId, incoming);
-
-        if (!meta) {
-          // Unknown game — we can't determine myColor; show games list
-          setScreen({ type: 'games-list' });
-          return;
-        }
-
-        if (incoming.phase === 'finished') {
-          // Show replay/result
+      case 'finished':
+        if (meta) persistGame(gameId, incoming);
+        else transport.saveGame(gameId, incoming); // spectator copy
+        if (incoming.phase === 'finished' || !meta) {
           currentPayloadRef.current = incoming;
           setScreen({ type: 'replay', gameId });
           return;
         }
-
-        // Show pbm-game
-        const gs = buildPBMGameScreen(gameId, incoming, meta.myColor);
-        if (gs) {
-          currentPayloadRef.current = incoming;
-          sessionStorage.setItem('lastPBMGameId', gameId);
-          setShareOverlay(null);
-          setScreen(gs);
-        } else {
-          setScreen({ type: 'games-list' });
-        }
+        openGame(gameId);
         return;
+    }
+  }, [openGame]);
+
+  // ── Hash-change routing (handles paste-URL-while-app-is-running) ─────────────
+  useEffect(() => {
+    function handleHashChange() {
+      const hash = window.location.hash;
+      if (hash.startsWith('#g=')) {
+        consumeHash();
+        setRules(null);
+        void handleImport(hash.slice(3));
+      } else if (hash.startsWith('#rules')) {
+        consumeHash();
+        openRules(rulesAnchorFromHash(hash));
       }
     }
-  }
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [handleImport, openRules]);
 
-  // ── Local game start ────────────────────────────────────────────────────────
+  // ── Startup: initial URL routing + session resume ──────────────────────────
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return; // StrictMode re-runs effects; route once
+    startedRef.current = true;
+    const hash = window.location.hash;
+
+    // DEV: ?sfen= loader
+    if (import.meta.env.DEV) {
+      const sfenParam = new URLSearchParams(window.location.search).get('sfen');
+      if (sfenParam) {
+        try {
+          const state = parseSfen(sfenParam);
+          setScreen({
+            type: 'game', gameId: generateId(), armyW: state.armies.W, armyB: state.armies.B,
+            moves: [], initialSfen: sfenParam,
+          });
+          return;
+        } catch {
+          console.warn('[dev] Invalid ?sfen= parameter — ignoring.');
+        }
+      }
+    }
+
+    if (hash.startsWith('#rules')) {
+      consumeHash();
+      openRules(rulesAnchorFromHash(hash));
+      return;
+    }
+
+    if (hash.startsWith('#g=')) {
+      consumeHash();
+      void handleImport(hash.slice(3));
+      return;
+    }
+
+    // Session resume: reopen the last game this tab was playing
+    for (const key of [LAST_GAME_KEY, ...LEGACY_LAST_GAME_KEYS]) {
+      const id = sessionGet(key);
+      if (!id) continue;
+      const payload = transport.loadGame(id);
+      const meta = transport.loadMeta(id);
+      if (!payload || !meta) continue;
+      const resumable = payload.phase === 'play' || (payload.phase === 'finished' && !meta.isLocal);
+      if (!resumable) continue;
+      showGame(id, payload, meta);
+      return;
+    }
+  }, [handleImport, openRules, showGame]);
+
+  // ── Game callbacks ─────────────────────────────────────────────────────────
+  const handleTurnSubmitted = useCallback((turn: Turn) => {
+    const prev = currentPayloadRef.current;
+    const s = screenRef.current;
+    if (!prev || prev.phase !== 'play' || s.type !== 'game') return;
+    let next: PBMPayload;
+    try {
+      next = appendTurn(prev, turn);
+    } catch (err) {
+      console.error('[schism] could not record turn', err);
+      return;
+    }
+    currentPayloadRef.current = next;
+    persistGame(next.gameId, next);
+
+    // PBM: share the move straight away
+    if (s.myColor !== undefined) {
+      const isFinished = next.phase === 'finished';
+      const moveNum = Math.ceil(next.moves.length / 2);
+      setShareOverlay({
+        payload: next,
+        title: isFinished ? 'Game over — share result' : `Share move ${moveNum}`,
+        subtitle: isFinished ? undefined : `Send this link to ${s.opponentLabel ?? 'your opponent'}`,
+        message: isFinished ? 'Game over — open to see how it ended:' : `My move ${moveNum} (${next.moves[next.moves.length - 1]}) — your turn:`,
+        onDone: () => setShareOverlay(null),
+        onBackToGame: isFinished ? undefined : () => setShareOverlay(null),
+      });
+    }
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    const prev = currentPayloadRef.current;
+    if (!prev || prev.moves.length === 0) return;
+    const next: PBMPayload = { ...prev, moves: prev.moves.slice(0, -1), phase: 'play', result: null };
+    currentPayloadRef.current = next;
+    persistGame(next.gameId, next);
+  }, []);
+
+  const handleShareAgain = useCallback(() => {
+    const payload = currentPayloadRef.current;
+    const s = screenRef.current;
+    if (!payload || s.type !== 'game') return;
+    setShareOverlay({
+      payload,
+      title: payload.phase === 'finished' ? 'Share the result' : `Share move ${Math.ceil(payload.moves.length / 2)}`,
+      subtitle: `Send this link to ${s.opponentLabel ?? 'your opponent'}`,
+      message: payload.phase === 'finished'
+        ? 'Game over — open to see how it ended:'
+        : `My move ${Math.ceil(payload.moves.length / 2)} (${payload.moves[payload.moves.length - 1] ?? '—'}) — your turn:`,
+      onDone: () => setShareOverlay(null),
+      onBackToGame: () => setShareOverlay(null),
+    });
+  }, []);
+
   function handleLocalStart(armyW: Army, armyB: Army) {
     const gameId = generateId();
     const payload = createLocalPayload(gameId, armyW, armyB);
-    transport.saveGame(gameId, payload);
-    transport.saveMeta(gameId, { myColor: 'W', isLocal: true });
-    sessionStorage.setItem('lastLocalGameId', gameId);
-    currentPayloadRef.current = payload;
-    setScreen({ type: 'game', gameId, armyW, armyB });
+    persistGame(gameId, payload, { myColor: 'W', isLocal: true });
+    showGame(gameId, payload, { myColor: 'W', isLocal: true });
   }
 
-  function handleHome() {
-    setScreen({ type: 'home' });
+  function goHome() {
     setShareOverlay(null);
-  }
-
-  function handleNewGame() {
     setScreen({ type: 'home' });
-    setShareOverlay(null);
-  }
-
-  function handleReviewFromModal() {
-    const s = screen;
-    if (s.type === 'game') setScreen({ type: 'replay', gameId: s.gameId });
-    else if (s.type === 'pbm-game') setScreen({ type: 'replay', gameId: s.gameId });
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  // Rules overlay: shown on top of any screen without unmounting it.
-  if (rulesOverlay !== null) {
-    return (
-      <div className="app">
-        <RulesScreen
-          anchor={rulesOverlay.anchor}
-          onBack={() => setRulesOverlay(null)}
-        />
-      </div>
-    );
-  }
+  const overlayOpen = rules !== null || shareOverlay !== null;
 
-  const s = screen;
+  function renderScreen() {
+    const s = screen;
+    switch (s.type) {
+      case 'home':
+        return (
+          <HomeScreen
+            continueGame={findContinueGame()}
+            onContinue={openGame}
+            onNewLocalGame={() => setScreen({ type: 'new-game' })}
+            onNewPBMGame={() => setScreen({ type: 'pbm-create' })}
+            onGamesList={() => setScreen({ type: 'games-list' })}
+            onImport={() => setScreen({ type: 'import' })}
+            onRules={() => openRules()}
+          />
+        );
 
-  if (s.type === 'home') {
-    return (
-      <div className="app">
-        <HomeScreen
-          onNewLocalGame={() => setScreen({ type: 'new-game' })}
-          onNewPBMGame={() => setScreen({ type: 'pbm-create' })}
-          onGamesList={() => setScreen({ type: 'games-list' })}
-          onImport={() => setScreen({ type: 'import' })}
-          onRules={() => setRulesOverlay({})}
-        />
-      </div>
-    );
-  }
+      case 'new-game':
+        return (
+          <NewGameScreen
+            onStart={handleLocalStart}
+            onBack={goHome}
+            onRules={anchor => openRules(anchor)}
+          />
+        );
 
-  if (s.type === 'new-game') {
-    return (
-      <div className="app">
-        <NewGameScreen
-          onStart={handleLocalStart}
-          onBack={() => setScreen({ type: 'home' })}
-          onRules={anchor => setRulesOverlay({ anchor })}
-        />
-      </div>
-    );
-  }
+      case 'game': {
+        const isLocal = s.myColor === undefined;
+        return (
+          <GameScreen
+            key={`${s.gameId}:${gameNonce}`}
+            armyW={s.armyW}
+            armyB={s.armyB}
+            initialMoves={s.moves}
+            initialSfen={s.initialSfen}
+            myColor={s.myColor}
+            opponentLabel={s.opponentLabel}
+            active={!overlayOpen}
+            onTurnSubmitted={handleTurnSubmitted}
+            onUndo={isLocal ? handleUndo : undefined}
+            onShare={isLocal ? undefined : handleShareAgain}
+            onReview={() => setScreen({ type: 'replay', gameId: s.gameId })}
+            onRematch={isLocal ? () => handleLocalStart(s.armyW, s.armyB) : undefined}
+            onHome={goHome}
+            onNewGame={isLocal ? () => setScreen({ type: 'new-game' }) : goHome}
+            onRules={anchor => openRules(anchor)}
+          />
+        );
+      }
 
-  if (s.type === 'game') {
-    return (
-      <div className="app">
-        <GameScreen
-          armyW={s.armyW}
-          armyB={s.armyB}
-          initialSfen={s.initialSfen}
-          onTurnSubmitted={handleTurnSubmitted}
-          onReview={handleReviewFromModal}
-          onHome={handleHome}
-          onNewGame={handleNewGame}
-          onRules={anchor => setRulesOverlay({ anchor })}
-        />
-      </div>
-    );
-  }
+      case 'games-list':
+        return (
+          <GamesListScreen
+            onBack={goHome}
+            onOpen={openGame}
+            onImport={() => setScreen({ type: 'import' })}
+            onReplay={(gameId) => setScreen({ type: 'replay', gameId })}
+          />
+        );
 
-  if (s.type === 'pbm-game') {
-    return (
-      <div className="app">
-        <GameScreen
-          armyW={s.armyW}
-          armyB={s.armyB}
-          initialSfen={s.initialSfen}
-          myColor={s.myColor}
-          onTurnSubmitted={handleTurnSubmitted}
-          onReview={handleReviewFromModal}
-          onHome={handleHome}
-          onNewGame={handleNewGame}
-          onRules={anchor => setRulesOverlay({ anchor })}
-        />
-        {shareOverlay && (
-          <div className="share-overlay">
-            <ShareScreen
-              payload={shareOverlay.payload}
-              title={shareOverlay.title}
-              subtitle={shareOverlay.subtitle}
-              onDone={() => {
-                setShareOverlay(null);
-                // If game finished, go to replay; otherwise stay on pbm-game
-                if (currentPayloadRef.current?.phase === 'finished') {
-                  setScreen({ type: 'replay', gameId: s.gameId });
-                }
-              }}
-              onBackToGame={shareOverlay.onBackToGame}
-            />
+      case 'pbm-create':
+        return (
+          <PBMCreateScreen
+            onBack={goHome}
+            onRules={anchor => openRules(anchor)}
+            onShare={(payload) => {
+              setScreen({
+                type: 'share',
+                payload,
+                title: 'Share your challenge',
+                subtitle: 'Send this link to your opponent',
+                message: CHALLENGE_MESSAGE,
+                onDone: () => setScreen({ type: 'games-list' }),
+              });
+            }}
+          />
+        );
+
+      case 'pbm-respond':
+        return (
+          <PBMRespondScreen
+            payload={s.payload}
+            onBack={goHome}
+            onRules={anchor => openRules(anchor)}
+            onShare={(responded) => {
+              setScreen({
+                type: 'share',
+                payload: responded,
+                title: 'Send your response',
+                subtitle: 'Send this back to your opponent so they can reveal',
+                message: RESPONSE_MESSAGE,
+                onDone: () => setScreen({ type: 'games-list' }),
+              });
+            }}
+          />
+        );
+
+      case 'loading':
+        return (
+          <div className="ng-screen loading-screen" aria-busy="true">
+            <div className="loading-spinner" aria-hidden />
+            <p className="loading-text">Opening game…</p>
           </div>
-        )}
-      </div>
-    );
-  }
+        );
 
-  if (s.type === 'games-list') {
-    return (
-      <div className="app">
-        <GamesListScreen
-          onBack={() => setScreen({ type: 'home' })}
-          onResume={(gameId) => {
-            const payload = transport.loadGame(gameId);
-            const meta = transport.loadMeta(gameId);
-            if (!payload || !meta) return;
-            if (meta.isLocal) {
-              const movePairs: Array<{ white: string; black?: string }> = [];
-              for (let i = 0; i < payload.moves.length; i += 2) {
-                movePairs.push({ white: payload.moves[i], black: payload.moves[i + 1] });
-              }
-              const record = {
-                armies: { W: payload.armies.W as Army, B: payload.armies.B as Army },
-                moves: movePairs,
-              };
-              const replayResult = replayGame(record);
-              const initialSfen = ('moveNumber' in replayResult)
-                ? undefined
-                : serializeSfen(replayResult.finalState);
-              currentPayloadRef.current = payload;
-              sessionStorage.setItem('lastLocalGameId', gameId);
-              setScreen({ type: 'game', gameId, armyW: payload.armies.W as Army, armyB: payload.armies.B as Army, initialSfen });
-            } else {
-              const gs = buildPBMGameScreen(gameId, payload, meta.myColor);
-              if (gs) {
-                currentPayloadRef.current = payload;
-                sessionStorage.setItem('lastPBMGameId', gameId);
-                setScreen(gs);
-              }
-            }
-          }}
-          onImport={() => setScreen({ type: 'import' })}
-          onReplay={(gameId) => setScreen({ type: 'replay', gameId })}
-        />
-      </div>
-    );
-  }
+      case 'import':
+        return (
+          <ImportScreen
+            preloaded={s.preloaded}
+            onBack={goHome}
+            onImport={(encoded) => void handleImport(encoded)}
+          />
+        );
 
-  if (s.type === 'pbm-create') {
-    return (
-      <div className="app">
-        <PBMCreateScreen
-          onBack={() => setScreen({ type: 'home' })}
-          onShare={(payload) => {
-            currentPayloadRef.current = payload;
-            setScreen({
-              type: 'share',
-              payload,
-              title: 'Share your challenge',
-              subtitle: 'Send this link to your opponent',
-              onDone: () => setScreen({ type: 'games-list' }),
-            });
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (s.type === 'pbm-respond') {
-    return (
-      <div className="app">
-        <PBMRespondScreen
-          payload={s.payload}
-          onBack={() => setScreen({ type: 'home' })}
-          onShare={(responded) => {
-            setScreen({
-              type: 'share',
-              payload: responded,
-              title: 'Send your response',
-              subtitle: 'Send this back to your opponent so they can reveal',
-              onDone: () => setScreen({ type: 'games-list' }),
-            });
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (s.type === 'import') {
-    return (
-      <div className="app">
-        <ImportScreen
-          preloaded={s.preloaded}
-          onBack={() => setScreen({ type: 'home' })}
-          onImport={(encoded) => void handleImport(encoded)}
-        />
-      </div>
-    );
-  }
-
-  if (s.type === 'import-error') {
-    return (
-      <div className="app">
-        <div className="ng-screen" style={{ alignItems: 'center', gap: '24px' }}>
-          <div className="conflict-icon" style={{ fontSize: '48px' }}>✗</div>
-          <h2 className="conflict-title" style={{ textAlign: 'center' }}>Import failed</h2>
-          <ImportErrorDisplay error={s.error} />
-          <div className="ng-footer" style={{ flexDirection: 'column' }}>
-            <button className="btn btn-secondary" onClick={() => setScreen({ type: 'import' })} data-testid="retry-import">
-              Try again
-            </button>
-            <button className="btn btn-ghost" onClick={() => setScreen({ type: 'home' })}>
-              Home
-            </button>
+      case 'import-error':
+        return (
+          <div className="ng-screen" style={{ alignItems: 'center', gap: '24px' }}>
+            <div className="conflict-icon" style={{ fontSize: '48px' }}>✗</div>
+            <h2 className="conflict-title" style={{ textAlign: 'center' }}>Import failed</h2>
+            <ImportErrorDisplay error={s.error} />
+            <div className="ng-footer" style={{ flexDirection: 'column', width: '100%', maxWidth: 360 }}>
+              <button className="btn btn-secondary" onClick={() => setScreen({ type: 'import', preloaded: s.raw })} data-testid="retry-import">
+                Try again
+              </button>
+              <button className="btn btn-ghost" onClick={goHome}>
+                Home
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-    );
-  }
+        );
 
-  if (s.type === 'conflict') {
-    return (
-      <div className="app">
-        <ConflictScreen
-          stored={s.stored}
-          incoming={s.incoming}
-          onKeepStored={() => {
-            const meta = transport.loadMeta(s.stored.gameId);
-            if (meta) {
-              const gs = buildPBMGameScreen(s.stored.gameId, s.stored, meta.myColor);
-              if (gs) { currentPayloadRef.current = s.stored; setScreen(gs); return; }
-            }
-            setScreen({ type: 'games-list' });
-          }}
-          onDiscard={() => {
-            transport.saveGame(s.incoming.gameId, s.incoming);
-            const meta = transport.loadMeta(s.incoming.gameId);
-            if (meta) {
-              const gs = buildPBMGameScreen(s.incoming.gameId, s.incoming, meta.myColor);
-              if (gs) { currentPayloadRef.current = s.incoming; setScreen(gs); return; }
-            }
-            setScreen({ type: 'games-list' });
-          }}
-        />
-      </div>
-    );
-  }
+      case 'conflict':
+        return (
+          <ConflictScreen
+            stored={s.stored}
+            incoming={s.incoming}
+            onKeepStored={() => openGame(s.stored.gameId)}
+            onDiscard={() => {
+              if (transport.loadMeta(s.incoming.gameId)) persistGame(s.incoming.gameId, s.incoming);
+              else transport.saveGame(s.incoming.gameId, s.incoming);
+              openGame(s.incoming.gameId);
+            }}
+          />
+        );
 
-  if (s.type === 'salt-missing') {
-    const opponentColor: Color = s.payload.commit.by === 'W' ? 'B' : 'W';
-    const opponentLabel = opponentColor === 'W'
-      ? s.payload.white.label
-      : s.payload.black.label;
-    return (
-      <div className="app">
-        <SaltMissingScreen
-          opponentLabel={opponentLabel || 'Opponent'}
-          onForfeit={() => {
-            transport.deleteGame(s.gameId);
-            setScreen({ type: 'home' });
-          }}
-          onBack={() => setScreen({ type: 'home' })}
-        />
-      </div>
-    );
-  }
+      case 'salt-missing': {
+        const opponentColor: Color = s.payload.commit.by === 'W' ? 'B' : 'W';
+        const opponentLabel = opponentColor === 'W' ? s.payload.white.label : s.payload.black.label;
+        return (
+          <SaltMissingScreen
+            opponentLabel={opponentLabel || 'Opponent'}
+            onForfeit={() => {
+              transport.deleteGame(s.gameId);
+              goHome();
+            }}
+            onBack={goHome}
+          />
+        );
+      }
 
-  if (s.type === 'replay') {
-    const payload = transport.loadGame(s.gameId);
-    if (!payload) {
-      return (
-        <div className="app">
-          <div className="ng-screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
-            <p style={{ color: 'var(--text-muted)' }}>Game not found.</p>
-            <button className="btn btn-ghost" onClick={() => setScreen({ type: 'games-list' })}>← Games</button>
-          </div>
-        </div>
-      );
+      case 'replay': {
+        const payload = transport.loadGame(s.gameId);
+        if (!payload) {
+          return (
+            <div className="ng-screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <p style={{ color: 'var(--text-dim)' }}>Game not found.</p>
+              <button className="btn btn-ghost" onClick={() => setScreen({ type: 'games-list' })}>← Games</button>
+            </div>
+          );
+        }
+        return (
+          <ReplayScreen
+            payload={payload}
+            onBack={() => setScreen({ type: 'games-list' })}
+          />
+        );
+      }
+
+      case 'share':
+        return (
+          <ShareScreen
+            payload={s.payload}
+            title={s.title}
+            subtitle={s.subtitle}
+            message={s.message}
+            onDone={s.onDone}
+            onBackToGame={s.onBackToGame}
+          />
+        );
     }
-    return (
-      <div className="app">
-        <ReplayScreen
-          payload={payload}
-          onBack={() => setScreen({ type: 'games-list' })}
-        />
-      </div>
-    );
   }
 
-  if (s.type === 'share') {
-    return (
-      <div className="app">
-        <ShareScreen
-          payload={s.payload}
-          title={s.title}
-          subtitle={s.subtitle}
-          onDone={s.onDone}
-          onBackToGame={s.onBackToGame}
-        />
+  return (
+    <div className="app">
+      <div
+        className="screen-layer"
+        aria-hidden={overlayOpen || undefined}
+        {...(overlayOpen ? { inert: '' } : {})}
+      >
+        {renderScreen()}
       </div>
-    );
-  }
 
-  return null;
+      {shareOverlay && rules === null && (
+        <div className="share-overlay">
+          <ShareScreen
+            payload={shareOverlay.payload}
+            title={shareOverlay.title}
+            subtitle={shareOverlay.subtitle}
+            message={shareOverlay.message}
+            onDone={() => {
+              const done = shareOverlay.onDone;
+              done();
+              if (currentPayloadRef.current?.phase === 'finished' && screen.type === 'game') {
+                setScreen({ type: 'replay', gameId: screen.gameId });
+              }
+            }}
+            onBackToGame={shareOverlay.onBackToGame}
+          />
+        </div>
+      )}
+
+      {rules !== null && (
+        <div className="rules-overlay">
+          <RulesScreen anchor={rules.anchor} onBack={closeRules} />
+        </div>
+      )}
+    </div>
+  );
 }
-

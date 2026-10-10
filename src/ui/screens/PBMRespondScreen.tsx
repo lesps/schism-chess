@@ -2,31 +2,31 @@ import { useState } from 'react';
 import type { Army, Color } from '../../engine/types';
 import type { PBMPayload } from '../../pbm/types';
 import { respondToCommit } from '../../pbm/index';
-import { transport } from '../../app/transport';
+import { persistGame } from '../../app/transport';
 import { ArmyPicker } from '../components/ArmyPicker';
 
 interface Props {
   payload: PBMPayload;
   onBack: () => void;
   onShare: (payload: PBMPayload) => void;
+  onRules?: (anchor: string) => void;
 }
 
-export function PBMRespondScreen({ payload, onBack, onShare }: Props) {
-  const [label, setLabel] = useState('');
-  const [army, setArmy] = useState<Army | null>(null);
-
+export function PBMRespondScreen({ payload, onBack, onShare, onRules }: Props) {
   const creatorColor = payload.commit.by;
   const respondentColor: Color = creatorColor === 'W' ? 'B' : 'W';
+  // The challenger may have suggested a name for us
+  const [label, setLabel] = useState(respondentColor === 'W' ? payload.white.label : payload.black.label);
+  const [army, setArmy] = useState<Army | null>(null);
+
   const creatorLabel = creatorColor === 'W'
     ? (payload.white.label || 'Opponent')
     : (payload.black.label || 'Opponent');
 
   function handleRespond() {
     if (!army) return;
-    const responded = respondToCommit(payload, label || 'Player 2', army);
-    transport.saveGame(responded.gameId, responded);
-    transport.saveMeta(responded.gameId, { myColor: respondentColor });
-    sessionStorage.setItem('lastPBMGameId', responded.gameId);
+    const responded = respondToCommit(payload, label.trim() || 'Player 2', army);
+    persistGame(responded.gameId, responded, { myColor: respondentColor });
     onShare(responded);
   }
 
@@ -53,20 +53,21 @@ export function PBMRespondScreen({ payload, onBack, onShare }: Props) {
       </div>
 
       <div className="pbm-form">
-        <label className="pbm-label">Your name</label>
+        <label className="pbm-label" htmlFor="respond-label">Your name</label>
         <input
           className="pbm-input"
           placeholder="e.g. Bob"
           value={label}
           onChange={e => setLabel(e.target.value)}
+          id="respond-label"
           data-testid="respond-label"
         />
       </div>
 
       <div className="ng-player-label" style={{ marginTop: '8px' }}>
-        Choose your army (in the clear — the protocol allows this)
+        Choose your army — {creatorLabel} sealed theirs before seeing yours
       </div>
-      <ArmyPicker selected={army} onSelect={setArmy} />
+      <ArmyPicker selected={army} onSelect={setArmy} onRules={onRules} />
 
       <div className="ng-footer">
         <button

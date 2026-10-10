@@ -3,7 +3,7 @@ import type { Army, Color } from '../../engine/types';
 import type { PBMPayload } from '../../pbm/types';
 import { createGame } from '../../pbm/index';
 import { browserHasher, generateSalt } from '../../app/hasher';
-import { transport, generateId } from '../../app/transport';
+import { persistGame } from '../../app/transport';
 import { ArmyPicker } from '../components/ArmyPicker';
 
 type Step = 'labels' | 'color' | 'privacy' | 'army' | 'creating';
@@ -11,9 +11,10 @@ type Step = 'labels' | 'color' | 'privacy' | 'army' | 'creating';
 interface Props {
   onBack: () => void;
   onShare: (payload: PBMPayload) => void;
+  onRules?: (anchor: string) => void;
 }
 
-export function PBMCreateScreen({ onBack, onShare }: Props) {
+export function PBMCreateScreen({ onBack, onShare, onRules }: Props) {
   const [step, setStep] = useState<Step>('labels');
   const [creatorLabel, setCreatorLabel] = useState('');
   const [opponentLabel, setOpponentLabel] = useState('');
@@ -27,27 +28,16 @@ export function PBMCreateScreen({ onBack, onShare }: Props) {
     setError(null);
     try {
       const salt = generateSalt();
-      const gameId = generateId();
       const payload = await createGame(
-        creatorLabel || 'Player 1',
+        creatorLabel.trim() || 'Player 1',
         color,
         army,
         salt,
         browserHasher,
+        opponentLabel.trim(),
       );
-      // Patch in the pre-generated gameId (createGame generates its own, use that one)
-      void gameId; // createGame generates id internally
-
-      // Store the payload and meta
-      transport.saveGame(payload.gameId, payload);
-      transport.saveMeta(payload.gameId, {
-        myColor: color,
-        commit: { army, salt },
-      });
-
-      // Persist last active PBM game for refresh resume
-      sessionStorage.setItem('lastPBMGameId', payload.gameId);
-
+      // The salt stays on this device until the reveal
+      persistGame(payload.gameId, payload, { myColor: color, commit: { army, salt } });
       onShare(payload);
     } catch (err) {
       setError(String(err));
@@ -64,20 +54,22 @@ export function PBMCreateScreen({ onBack, onShare }: Props) {
             <h2>New play-by-mail game</h2>
           </div>
           <div className="pbm-form">
-            <label className="pbm-label">Your name</label>
+            <label className="pbm-label" htmlFor="creator-label">Your name</label>
             <input
               className="pbm-input"
               placeholder="e.g. Alice"
               value={creatorLabel}
               onChange={e => setCreatorLabel(e.target.value)}
+              id="creator-label"
               data-testid="creator-label"
             />
-            <label className="pbm-label">Opponent's name</label>
+            <label className="pbm-label" htmlFor="opponent-label">Opponent's name <span className="pbm-label-hint">(optional — they can change it)</span></label>
             <input
               className="pbm-input"
               placeholder="e.g. Bob"
               value={opponentLabel}
               onChange={e => setOpponentLabel(e.target.value)}
+              id="opponent-label"
               data-testid="opponent-label"
             />
           </div>
@@ -163,8 +155,8 @@ export function PBMCreateScreen({ onBack, onShare }: Props) {
             <button className="btn btn-ghost" onClick={() => setStep('privacy')}>← Back</button>
             <h2>Choose your army</h2>
           </div>
-          <ArmyPicker selected={army} onSelect={setArmy} />
-          {error && <div className="import-error">{error}</div>}
+          <ArmyPicker selected={army} onSelect={setArmy} onRules={onRules} />
+          {error && <div className="import-error" role="alert">{error}</div>}
           <div className="ng-footer">
             <button
               className="btn btn-primary"

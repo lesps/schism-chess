@@ -87,9 +87,11 @@ test.describe('Twins — Shatter and Rally', () => {
     // Rally bar appears for the g4 Warlord to optionally move
     await expect(page.getByTestId('rally-bar')).toBeVisible();
 
-    // Rally g4 Warlord (30) to g5 (38) — adjacent empty square
-    await page.click('[data-sq="38"]');
+    // Rally g4 Warlord (30) back to g3 (22) — adjacent empty square. (g5 would put
+    // both Warlords past the midline: a dual invasion that ends the game.)
+    await page.click('[data-sq="22"]');
     await expect(page.getByText('Black to move')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.move-san').first()).toContainText('Kd5;Kg3');
   });
 
   test('Back button in rally bar cancels staging without submitting move', async ({ page }) => {

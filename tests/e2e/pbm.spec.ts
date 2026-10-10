@@ -59,14 +59,8 @@ test.describe('PBM: two-context full game', () => {
     expect(aLocal).toBeTruthy();
 
     // ── Step 2: B receives commit, responds (Black / Crown) ──────────────────
+    // Opening a #g= link imports it straight away
     await pageB.goto(commitUrl);
-    await expect(pageB.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    // The hash was pre-loaded
-    const existingB = await pageB.getByTestId('import-input').inputValue();
-    if (!existingB.trim()) {
-      await pageB.getByTestId('import-input').fill(commitUrl);
-    }
-    await pageB.getByTestId('import-submit').click();
 
     // B sees PBMRespondScreen
     await expect(pageB.getByTestId('respond-label')).toBeVisible({ timeout: 8000 });
@@ -84,26 +78,16 @@ test.describe('PBM: two-context full game', () => {
     expect(bLocal).toBeTruthy();
 
     // ── Step 3: A receives respond, auto-reveals ─────────────────────────────
+    // Opening a #g= link imports it straight away
     await pageA.goto(respondUrl);
-    await expect(pageA.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    const existingA = await pageA.getByTestId('import-input').inputValue();
-    if (!existingA.trim()) {
-      await pageA.getByTestId('import-input').fill(respondUrl);
-    }
-    await pageA.getByTestId('import-submit').click();
 
     // A auto-reveals and sees ShareScreen with play payload
     const playUrl = await getShareUrl(pageA);
     expect(playUrl).toContain('#g=');
 
     // ── Step 4: B imports play payload — sees board, White to move ───────────
+    // Opening a #g= link imports it straight away
     await pageB.goto(playUrl);
-    await expect(pageB.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    const existingB2 = await pageB.getByTestId('import-input').inputValue();
-    if (!existingB2.trim()) {
-      await pageB.getByTestId('import-input').fill(playUrl);
-    }
-    await pageB.getByTestId('import-submit').click();
     // B sees the game — not B's turn (White to move, B is Black)
     await expect(pageB.getByTestId('waiting-banner')).toBeVisible({ timeout: 8000 });
 
@@ -117,13 +101,8 @@ test.describe('PBM: two-context full game', () => {
     const moveUrl1 = await getShareUrl(pageA);
 
     // ── Step 6: B imports move 1, sees it's Black's turn, makes e6 ───────────
+    // Opening a #g= link imports it straight away
     await pageB.goto(moveUrl1);
-    await expect(pageB.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    const bInput1 = await pageB.getByTestId('import-input').inputValue();
-    if (!bInput1.trim()) {
-      await pageB.getByTestId('import-input').fill(moveUrl1);
-    }
-    await pageB.getByTestId('import-submit').click();
     await expect(pageB.getByText('Black to move')).toBeVisible({ timeout: 5000 });
     // B is not in waiting mode — it's B's turn
     await expect(pageB.getByTestId('waiting-banner')).not.toBeVisible();
@@ -132,26 +111,16 @@ test.describe('PBM: two-context full game', () => {
     const moveUrl2 = await getShareUrl(pageB);
 
     // ── Step 7: A imports move 2, makes g4 (sq 14 → 30) ────────────────────
+    // Opening a #g= link imports it straight away
     await pageA.goto(moveUrl2);
-    await expect(pageA.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    const aInput2 = await pageA.getByTestId('import-input').inputValue();
-    if (!aInput2.trim()) {
-      await pageA.getByTestId('import-input').fill(moveUrl2);
-    }
-    await pageA.getByTestId('import-submit').click();
     await expect(pageA.getByText('White to move')).toBeVisible({ timeout: 5000 });
     await clickSq(pageA, 14); // g2
     await clickSq(pageA, 30); // g4
     const moveUrl3 = await getShareUrl(pageA);
 
     // ── Step 8: B imports move 3, makes Qh4# (sq 59 → 31) ──────────────────
+    // Opening a #g= link imports it straight away
     await pageB.goto(moveUrl3);
-    await expect(pageB.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    const bInput3 = await pageB.getByTestId('import-input').inputValue();
-    if (!bInput3.trim()) {
-      await pageB.getByTestId('import-input').fill(moveUrl3);
-    }
-    await pageB.getByTestId('import-submit').click();
     await expect(pageB.getByText('Black to move')).toBeVisible({ timeout: 5000 });
     await clickSq(pageB, 59); // d8 (Queen)
     await clickSq(pageB, 31); // h4
@@ -159,13 +128,8 @@ test.describe('PBM: two-context full game', () => {
     const finalUrl = await getShareUrl(pageB);
 
     // ── Step 9: A imports final — sees result ────────────────────────────────
+    // Opening a #g= link imports it straight away
     await pageA.goto(finalUrl);
-    await expect(pageA.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-    const aInputFinal = await pageA.getByTestId('import-input').inputValue();
-    if (!aInputFinal.trim()) {
-      await pageA.getByTestId('import-input').fill(finalUrl);
-    }
-    await pageA.getByTestId('import-submit').click();
     // A sees the replay screen for the finished game
     await expect(pageA.getByTestId('replay-slider')).toBeVisible({ timeout: 8000 });
 
@@ -198,11 +162,9 @@ test.describe('Refresh resume', () => {
     await page.goto(BASE);
     // Start a local game (Crown vs Crown)
     await page.getByRole('button', { name: 'New local game' }).click();
-    await page.getByRole('button', { name: "I'm ready →" }).click();
     await page.getByRole('button', { name: 'The Crown', exact: true }).click();
     await page.getByRole('button', { name: 'Done →' }).click();
     await page.getByRole('button', { name: 'Player 2 is ready →' }).click();
-    await page.getByRole('button', { name: "I'm ready →" }).click();
     await page.getByRole('button', { name: 'The Crown', exact: true }).click();
     await page.getByRole('button', { name: 'Done →' }).click();
     await page.getByTestId('start-game').click();
@@ -283,13 +245,8 @@ test('tampered URL (mutated SAN) shows import error', async ({ page }) => {
   const encoded = encodePayload(tampered);
   const url = `http://localhost:5173${BASE}#g=${encoded}`;
 
+  // Opening a #g= link imports it straight away
   await page.goto(url);
-  await expect(page.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-  const existing = await page.getByTestId('import-input').inputValue();
-  if (!existing.trim()) {
-    await page.getByTestId('import-input').fill(url);
-  }
-  await page.getByTestId('import-submit').click();
   // Should show error (replay error or import-error screen)
   await expect(page.getByTestId('import-error')).toBeVisible({ timeout: 5000 });
 });
@@ -326,13 +283,8 @@ test('importing stale payload for known game shows conflict screen', async ({ br
   const encoded = encodePayload(stalePayload as Parameters<typeof encodePayload>[0]);
   const url = `http://localhost:5173${BASE}#g=${encoded}`;
 
+  // Opening a #g= link imports it straight away
   await page.goto(url);
-  await expect(page.getByTestId('import-input')).toBeVisible({ timeout: 8000 });
-  const existing = await page.getByTestId('import-input').inputValue();
-  if (!existing.trim()) {
-    await page.getByTestId('import-input').fill(url);
-  }
-  await page.getByTestId('import-submit').click();
 
   // Should show the conflict screen
   await expect(page.getByTestId('conflict-keep')).toBeVisible({ timeout: 5000 });

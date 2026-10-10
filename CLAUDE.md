@@ -8,7 +8,7 @@ npm run build      # TypeScript check + Vite build (for deployment)
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint over src/ and tests/
 npm run test       # Vitest (all suites)
-npm run test:e2e   # Playwright e2e (hotseat, invasion, army-specials, PBM, keyboard-SAN)
+npm run test:e2e   # Playwright e2e (hotseat, invasion, army-specials, PBM, keyboard-SAN, audit regressions)
 ```
 
 ## Layout
@@ -72,13 +72,15 @@ Done: S14 (**v1.0.0 shipped** — polish, docs, deploy: `README.md`, `docs/ARCHI
 
 Post-1.0 rules passes: **v1.1.0 / RULES v2.2** (Accord phalanx Empowerment; Twins Shatter spares royals) and **v1.2.0 / RULES v2.3** (Reinforcement Promotion — pawns promote to the army's own pieces, `promoted` flag deleted; Accord Concord + the March replace phalanx/Nightrider, `ACCORD_EMPOWERMENT` flag deleted; Veil No Executions — teleport-captures can't target royals or Q-slot pieces). The army sections below describe the **current (v2.3)** rules.
 
+**v1.3.0 — audit & UX pass** (no rules change): engine fixes (castling rights lapse however the corner rook/king is removed; Stalker exhaustion leaves with the Stalker; Twins single-check filter sees en passant; Thralls never capture en passant, even via a homing step; `replayGame` rejects plies after a positional game end — invasion/threefold/fifty — so a PBM payload can't play on); UI rebuilt around resume-from-moves (`src/ui/gameRecord.ts`), rules as a true overlay, hotseat undo/rematch, drag-and-drop, keyboard board navigation, slide/capture animation, sound + haptics, responsive board-first/sidebar layout, consumed `#g=` links that auto-import, and browser Back support. See CHANGELOG 1.3.0 and RULES-INTERPRETATIONS "v1.3.0".
+
 ## Post-1.0 Backlog
 
 The following are deferred and tracked as GitHub issues:
 
 1. ~~**SVG piece set**~~ — **done post-1.0**: original inline SVGs in `src/ui/pieceArt.tsx` (`PieceIcon`), rendered behind the `PieceGlyph` seam. Standard FIDE set + 10 army-specific shapes (Shade, Thrall, Herald, Warlord, Wraith, Wisp, Apex, Behemoth, Stalker, Bronco); since v2.3 promoted pieces ARE army pieces, so army shapes always render. Also added: selected-piece move-reminder bar (`getPieceInfo` in `shared.ts`, rendered by `GameScreen`, tested in `tests/ui/pieceArt.test.tsx`).
 2. **Network backend** — plug in a server as a payload mailbox above the `Transport` interface (see `docs/PBM-PROTOCOL.md §Network` and `docs/ARCHITECTURE.md §Transport seam`). No other code changes needed.
-3. **Sound** — move/capture/check audio; `prefers-reduced-motion` + a mute toggle.
+3. ~~**Sound**~~ — **done in v1.3.0**: synthesized WebAudio blips + `navigator.vibrate` haptics (`src/ui/sound.ts`), toggled by the "Sound & vibration" switch in the ⓘ sheet (`src/ui/prefs.ts`); CSS motion respects `prefers-reduced-motion`.
 4. **AI opponent** — single-player mode; engine is already pure TS so a WASM worker is natural.
 5. **Axe automated a11y scan** — add `@axe-core/playwright` to the e2e suite for WCAG critical-violation gating.
 
@@ -96,11 +98,13 @@ The following are deferred and tracked as GitHub issues:
 | `applyTurn(state, turn): GameState` | `legality.ts` |
 | `applyTurnUnchecked(state, turn): GameState` | `apply.ts` |
 | `gameStatus(state): GameStatus` | `status.ts` |
+| `positionalStatus(state)` | `status.ts` (invasion / threefold / fifty-move only — no move generation; used by `replayGame`). Not re-exported from `index.ts` |
 | `registerThreatModel(army, model)` | `threat.ts` |
 | `getThreatModel(army): ThreatModel` | `threat.ts` |
 | `registerGenerator(army, gen)` | `movegen.ts` |
 | `fideGenerator` | `movegen.ts` |
 | `THRALL_HOMING_TWINS` | `phantom.ts` |
+| `isPiercingCheck(state): boolean` | `phantom.ts` (UI hint: side to move is in check from a Shade with line of sight) |
 | `bannerZone(board, color): Set<Square>` | `accord.ts` |
 | `concordPool(board, color): Set<Slot>` | `accord.ts` |
 | `computeMarch(board, color, dr, df): MarchStep[] \| null` | `accord.ts` |
@@ -123,7 +127,7 @@ The following are deferred and tracked as GitHub issues:
 
 | Export | Notes |
 |--------|-------|
-| `createGame(label, color, army, salt, hasher)` | Commit-phase payload; hash = SHA-256(army:salt) |
+| `createGame(label, color, army, salt, hasher, opponentLabel?)` | Commit-phase payload; hash = SHA-256(army:salt). `opponentLabel` pre-fills the respondent's name (they can change it) |
 | `respondToCommit(payload, label, army)` | Reveal-phase payload; respondent picks army |
 | `revealArmy(payload, army, salt, hasher)` | Play-phase payload; verifies hash |
 | `appendTurn(payload, turn)` | Appends SAN; sets result + 'finished' when terminal |
@@ -156,14 +160,19 @@ interface LocalGameMeta {
   myColor: Color;
   isLocal?: boolean;          // true for hotseat games
   commit?: { army: Army; salt: string };  // held only during commit phase
+  updatedAt?: number;         // ms timestamp of the last local change (My games order, Home "Continue")
 }
 ```
+
+`persistGame(id, payload, meta?)` saves the payload and stamps meta `updatedAt` (merging other meta fields; spectator copies with no meta are saved unstamped). `isOlderPhase(stored, incoming)` detects an old link re-opened after the game moved on (commit < reveal < play < finished) — the app keeps the stored copy.
 
 localStorage keys: `schism-game-{id}` for payloads, `schism-meta-{id}` for metadata.
 
 **Degenerate local payload**: hotseat games stored as `phase: 'play'` `PBMPayload` with sentinel `commit.hash = '0'.repeat(64)` and no `reveal`. Since `validatePayload` skips hash check when `reveal` is absent, the sentinel is never verified. `meta.isLocal = true` distinguishes these from real PBM games.
 
 **Monotonic history guard**: `checkMonotonicGuard(stored, incoming)` — exported from transport. Returns `false` if `incoming.moves` is shorter than `stored.moves` or diverges at any ply. App shows `ConflictScreen` on failure.
+
+**Links and resume**: a `#g=` fragment is imported straight away (no confirm tap) and then removed from the address bar (`history.replaceState`), so a refresh resumes the game instead of re-importing a stale link. The tab's last game id lives in `sessionStorage.lastGameId` (pre-1.3 `lastLocalGameId` / `lastPBMGameId` are still read). Games are always restored by replaying their SAN list, never from a SFEN snapshot — that keeps the move list, captures, last-move highlight, and the threefold history (`positionKeys`, which SFEN-X doesn't carry).
 
 **Browser hasher**: `src/app/hasher.ts` exports `browserHasher: Hasher` (Web Crypto SHA-256) and `generateSalt(): string` (16 random bytes → 32 hex chars).
 
@@ -214,7 +223,7 @@ Insufficient-material draw stub returns false (full detection deferred past S8; 
 Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
 Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
 
-Not yet implemented: notation; UI; PBM logic.
+Game end is automatic: once `gameStatus` is terminal no further ply is legal, and `replayGame` rejects any ply played after a positional end (invasion, threefold, fifty-move).
 
 ## captureConstraints call-site (S4 wired; S7a populates; S7b extended)
 
@@ -238,7 +247,7 @@ Registered as both generator and ThreatModel for army `'Phantom'`.
 
 **Shade** (Q-slot): moves along Queen lines with **Ghostwalk** (RULES v2.1) — movement passes through occupied squares (friendly and enemy alike), landing only on empty ones. Cannot capture. Threat is NOT ghostwalked: `attackedSquares` still stops at the first blocker (LOS), so no check through walls. Gives piercing check: once it has LOS to the enemy royal, interposition is banned — only king-move or capture-Shade responses are legal (enforced by `checkResponseConstraint`; note a Wraith teleport-capture is NOT among them since v2.3 No Executions). A pawn promoted to Q IS a new Shade (Reinforcement, v2.3).
 
-**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to an unoccupied square that steps genuinely toward the enemy king: Chebyshev distance strictly decreases AND neither axis distance increases). No en passant given or received. Promote to Phantom pieces per Reinforcement (v2.3).
+**Thralls** (P-slots): forward one square (no double push), diagonal captures, homing move (one square any direction to an unoccupied square that steps genuinely toward the enemy king: Chebyshev distance strictly decreases AND neither axis distance increases). No en passant given or received — a homing step onto the en-passant square is a plain move (`apply.ts` / `notation.ts` check the mover's army). Promote to Phantom pieces per Reinforcement (v2.3).
 
 `THRALL_HOMING_TWINS = 'either'` — exported constant; homing is legal vs Twins if the step homes toward at least one Warlord.
 
@@ -287,7 +296,7 @@ Registered as both generator and ThreatModel for army `'Wild'`.
 
 **Stalker** (B-slot): up to 2 squares diagonally.  
 **Strike-and-Return** (`StrikeMove`): on capture, target is removed and Stalker stays at home square (`from`). `type: 'strike'` in `PrimaryAction`.  
-**Exhaustion**: after a strike, the Stalker's home square is added to `state.exhausted`. On the controller's next turn, the exhausted Stalker may not capture (non-capture diagonal moves still allowed). Exhaustion is cleared from `state.exhausted` at the end of the controller's next turn. **Exhausted Stalker contributes NO attacked squares** (state-aware threat, same pattern as 0-Essence Wraith) — a royal in its diagonal range is NOT in check during the exhaustion window.  
+**Exhaustion**: after a strike, the Stalker's home square is added to `state.exhausted`. On the controller's next turn, the exhausted Stalker may not capture (non-capture diagonal moves still allowed). Exhaustion is cleared from `state.exhausted` at the end of the controller's next turn — or as soon as the Stalker leaves the square or is captured (an entry survives a turn only while an opponent B-slot piece still stands on it, so the capturer never inherits the mark). **Exhausted Stalker contributes NO attacked squares** (state-aware threat, same pattern as 0-Essence Wraith) — a royal in its diagonal range is NOT in check during the exhaustion window.  
 **S8 note**: exhausted-Stalker-gives-no-check interpretation is confirmed. Record in RULES-INTERPRETATIONS.md at S8.
 
 **Bronco** (N-slot): standard Knight; may capture friendly pieces, never own royal.
@@ -302,47 +311,66 @@ The UI is a dumb terminal for the engine — it renders `GameState` and submits 
 
 ```
 src/ui/
-  styles.css              Dark theme; CSS custom properties per army (--army-Crown-W, etc.)
-  shared.ts               Shared constants + helpers (glyphs, highlight map, square order)
+  styles.css              Dark theme; responsive game layout (board-first portrait, sidebar ≥ 6:5 aspect)
+  shared.ts               Shared constants + helpers (glyphs, highlight map, square order, captureSquares,
+                          computeTurnAnimation)
   strings.ts              All user-facing UI strings (HINTS object)
-  App.tsx                 Screen router; rulesOverlay state; ?sfen= dev loader (DEV-gated)
+  gameRecord.ts           rebuildGame(armyW, armyB, sans) → { state, history, error? }; capturedFromHistory
+  prefs.ts                Per-device prefs (autoRotate, sound) in localStorage, storage-failure safe
+  sound.ts                playSound(kind) — synthesized WebAudio + navigator.vibrate; silent without AudioContext
+  App.tsx                 Screen router; rules + share overlays above a still-mounted screen; #g=/#rules
+                          routing; browser Back handling; session resume; ?sfen= dev loader (DEV-gated)
   utils/
     renderMarkdown.ts     Minimal markdown-to-HTML (headings+IDs, tables, code, lists, etc.)
   screens/
-    HomeScreen.tsx         Title + action buttons including Rules
-    NewGameScreen.tsx      Blind pick flow: p1-privacy → p1-pick → handover → p2-privacy → p2-pick → reveal
-    GameScreen.tsx         Main game UI: board + chrome + move list + SAN input + chooser + modal
+    HomeScreen.tsx         Army emblem row, "Continue" card for the latest unfinished game, actions
+    NewGameScreen.tsx      Blind pick flow: p1-pick → handover (= P2 privacy) → p2-pick → reveal; 🎲 Random
+    GameScreen.tsx         Board + context strip (hint / piece info / rally bar / waiting banner) + chrome
+                           (captures, Essence, moves, SAN) + sheets + end modal; undo, flip, drag, shortcuts
+    GamesListScreen.tsx    Saved games by recency; "your move" markers; open-by-phase; two-tap delete
+    ReplayScreen.tsx       Step through any game: last-move + check highlight, flip, ←/→/Home/End, result
     RulesScreen.tsx        RULES.md rendered via ?raw import + renderMarkdown; anchor scrolling
   components/
-    Board.tsx              8×8 grid; data-sq={sq} on every cell; highlight classes driven by map
+    Board.tsx              8×8 grid; data-sq on every cell; highlight classes; drag-and-drop (pointer events);
+                           roving-tabindex keyboard nav; slide/appear/capture-burst animation
     SanInput.tsx           SAN text input; sanToTurn; inline parse-error; aria labels
-    TurnChooser.tsx        Bottom-sheet disambiguation for promotion / Shatter / multi-turn moves
-    GameEndModal.tsx       Win / draw modal; optional "See rules" link
+    TurnChooser.tsx        Bottom-sheet disambiguation for promotion / Shatter / March / rally variants
+    GameEndModal.tsx       Win / draw modal: Rematch + New game (local), Review, Undo, close to view board
+    ArmyInfoSheet.tsx      Army identities + rules links + settings toggles (auto-rotate, sound)
+    useSheetKeys.ts        Escape closes the topmost sheet
   hooks/
-    useGameLogic.ts        Core state hook: legalTurns, applyTurn, captures, check squares
+    useGameLogic.ts        Core state hook: { state, history } (atomic), legalTurns, applyTurn, undo,
+                           captures derived from history, check squares
 ```
+
+### Game input
+
+Tap a piece, then a destination — or drag it (pointer events on the board; a drag starts after 6px, `touch-action: none`; the click that follows a drop is swallowed). Keyboard: arrows move a roving focus in screen directions, Enter/Space taps, Esc cancels; F flips; Ctrl/⌘+Z undoes (hotseat). `tryMove(from, dest)` groups the legal turns for the pair by distinct primary action: one → commit (Rampage/March go through their preview; a Twins primary with rally variants enters rally staging); several (promotion pieces, Herald step vs March) → `TurnChooser`, whose pick is routed the same way. So a Twins pawn promotion asks for the piece first, then offers the Rally.
 
 ### Chooser pattern
 
-When a tap on `(from, dest)` maps to multiple legal `Turn`s (e.g. promotion with 4 slot choices, or Twins rally variants), `GameScreen` sets `chooserTurns` state. `TurnChooser` renders a bottom sheet; selecting an item calls `submitTurn(turn)` and clears the chooser.
+When a tap on `(from, dest)` maps to several distinct primary actions (promotion slots, Herald step vs March), `GameScreen` sets `chooserTurns`. Rally variants never reach the chooser from a tap — they're picked on the board during staging; only "two Warlords can rally to the same square" opens a rally chooser.
 
-**Shatter UX**: `getPrimaryDest(shatter)` returns the warlord's own square. The user taps the warlord twice — first tap selects it, second tap finds a "dest" turn at the same square and submits.
+**Shatter UX**: `getPrimaryDest(shatter)` returns the warlord's own square. The user taps the warlord twice (or the 💥 Shatter button in the piece-info bar) — both open `ShatterPreview` first.
+
+### Undo (hotseat only)
+
+`useGameLogic.undo()` restores the last entry's `stateBefore`; `App.handleUndo` drops the last SAN from the saved payload (phase back to `play`, result cleared). PBM games have no undo — moves have been shared.
 
 ### `?sfen=` dev loader
 
 `App.tsx` reads `?sfen=` on mount, but only when `import.meta.env.DEV` is true (never active in production builds). Invalid SFEN is silently ignored with a console warning. Used by the invasion e2e test to inject a near-invasion position without playing through the whole game.
 
-### Board flip
+### Board orientation
 
-`boardSquaresInOrder(flipped)` returns 64 squares in render order. Unflipped: rank 8 top-left (sq 56). Flipped: rank 1 top-left (sq 7). `GameScreen` auto-flips when `sideToMove === 'B'`; a lock toggle freezes orientation.
+`boardSquaresInOrder(flipped)` returns 64 squares in render order. Unflipped: rank 8 top-left (sq 56). Flipped: rank 1 top-left (sq 7). PBM: your own color at the bottom, always. Hotseat: with the "Rotate board" pref on (default), the board faces the side to move — rotating 450 ms after the move so the slide animation plays first — and once the game ends it keeps facing whoever moved last. The ⇅ button (or F) inverts whatever the base orientation is.
 
-### What's intentionally clunky (pending S12+)
+### Layout
+
+Portrait: header, board, then the context strip and chrome below — nothing above the board changes height, so the board never jumps when a hint or piece-info bar appears. At aspect ≥ 6:5 and width ≥ 560px (desktop, tablets, landscape phones) the board sits left and the context strip + chrome form a sidebar. Board size is a CSS variable (`--board-size`) computed from the viewport; piece glyphs and coordinates size with container query units (`cqw`) on `.board-wrapper`.
+
+### Still intentionally simple
 
 - No timers or clocks
-- No undo / takeback
-- No board-orientation preference persistence
-- No sound
-- No animation between moves
-- Captured pieces tray shows piece count only (no grouping by value)
+- No AI opponent; no network backend (see backlog)
 - Essence meters shown only when Veil is present; no other army-specific chrome
-- No touch drag — only tap-to-select

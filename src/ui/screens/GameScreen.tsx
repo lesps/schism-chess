@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Army, Color, MarchMove, RampageMove, Square, Turn } from '../../engine/types';
-import { applyTurnUnchecked } from '../../engine';
+import { applyTurnUnchecked, isPiercingCheck } from '../../engine';
 import { bannerZone, concordPool } from '../../engine/accord';
 import { ArmyInfoSheet } from '../components/ArmyInfoSheet';
+import type { SheetToggle } from '../components/ArmyInfoSheet';
 import { Board } from '../components/Board';
-import type { OverlayKind } from '../components/Board';
+import type { BoardAnimation, OverlayKind } from '../components/Board';
 import { CapturedPieceTray } from '../components/CapturedPieceTray';
 import { EssenceMeter } from '../components/EssenceMeter';
-import { GameEndModal } from '../components/GameEndModal';
+import { GameEndModal, resultSummary } from '../components/GameEndModal';
 import { HintBar } from '../components/HintBar';
 import { MarchPreview } from '../components/MarchPreview';
 import { MoveListPanel } from '../components/MoveListPanel';
@@ -21,7 +22,9 @@ import {
   ARMY_NAMES,
   PIECE_COLORS,
   armorZone,
+  computeTurnAnimation,
   getPieceInfo,
+  getPrimaryFrom,
   getSlotName,
   hasCrossedMidline,
   primaryEq,
@@ -29,24 +32,46 @@ import {
 } from '../shared';
 import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
+import { loadPrefs, savePref } from '../prefs';
+import type { Prefs } from '../prefs';
+import { playSound } from '../sound';
+
+/** Hotseat auto-rotate waits for the move animation before turning the board. */
+const ROTATE_DELAY_MS = 450;
 
 interface Props {
   armyW: Army;
   armyB: Army;
+  /** Flat SAN list to resume from (rebuilds history, captures, repetition). */
+  initialMoves?: readonly string[];
+  /** DEV `?sfen=` loader: start from an arbitrary position. */
   initialSfen?: string;
   /** If set, only this color can make moves (PBM mode). */
   myColor?: Color;
+  /** PBM: the opponent's display name, for the waiting banner. */
+  opponentLabel?: string;
+  /** False while an overlay (rules, share) covers the screen: global shortcuts pause. */
+  active?: boolean;
   /** Called after each turn is applied. */
   onTurnSubmitted?: (turn: Turn) => void;
-  /** Called when "Review" is clicked in the end modal. */
+  /** Local games: called after a takeback so the saved game can drop its last move. */
+  onUndo?: () => void;
+  /** PBM: re-open the share sheet for the latest move. */
+  onShare?: () => void;
+  /** Called when "Review moves" is clicked in the end modal. */
   onReview?: () => void;
+  /** Local games: start again with the same armies. */
+  onRematch?: () => void;
   onHome: () => void;
   onNewGame: () => void;
   onRules?: (anchor: string) => void;
 }
 
-export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted, onReview, onHome, onNewGame, onRules }: Props) {
-  const logic = useGameLogic(armyW, armyB, initialSfen);
+export function GameScreen({
+  armyW, armyB, initialMoves, initialSfen, myColor, opponentLabel, active = true,
+  onTurnSubmitted, onUndo, onShare, onReview, onRematch, onHome, onNewGame, onRules,
+}: Props) {
+  const logic = useGameLogic(armyW, armyB, { initialMoves, initialSfen });
   const {
     gameState,
     history,
@@ -58,6 +83,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     checkedSquares,
     setSelectedSquare,
     submitTurn: rawSubmitTurn,
+    undo: rawUndo,
   } = logic;
 
   const submitTurn = useCallback((turn: Turn) => {
@@ -72,26 +98,45 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   // When non-null, we are in the rally-selection phase; primary has been chosen.
   const [twinsStagingTurns, setTwinsStagingTurns] = useState<Turn[] | null>(null);
 
-  // ── Shatter preview ──
+  // ── Previews ──
   const [shatterPreviewSq, setShatterPreviewSq] = useState<Square | null>(null);
-
-  // ── Rampage preview ──
   const [rampagePreviewTurn, setRampagePreviewTurn] = useState<(Turn & { primary: RampageMove }) | null>(null);
-
-  // ── March preview ──
   const [marchPreviewTurn, setMarchPreviewTurn] = useState<(Turn & { primary: MarchMove }) | null>(null);
 
-  // ── Army info sheet ──
+  // ── Sheets / modal ──
   const [armyInfoOpen, setArmyInfoOpen] = useState(false);
+  const [endDismissed, setEndDismissed] = useState(false);
+
+  // ── Preferences ──
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const setPref = useCallback(<K extends keyof Prefs>(key: K, value: Prefs[K]) => {
+    savePref(key, value);
+    setPrefs(p => ({ ...p, [key]: value }));
+  }, []);
+
+  const { sideToMove, armies } = gameState;
+  const movingArmy = armies[sideToMove];
+  const opponentColor = sideToMove === 'W' ? 'B' : 'W';
+  const opponentArmy = armies[opponentColor];
+  const sideLabel = sideToMove === 'W' ? 'White' : 'Black';
+  const isPBM = myColor !== undefined;
+  const canAct = !isPBM || sideToMove === myColor;
+  const inCheck = checkedSquares.length > 0;
 
   // ── Board orientation ──
-  const [autoFlip, setAutoFlip] = useState(true);
-  const [locked, setLocked] = useState(false);
-  const [manualFlipped, setManualFlipped] = useState(false);
-
-  const flipped = autoFlip && !locked
-    ? gameState.sideToMove === 'B'
-    : manualFlipped;
+  // PBM: your own color at the bottom. Hotseat: optionally face the side to move,
+  // rotating only after the move animation has played. The flip button inverts it.
+  // Once the game ends nobody moves again, so stay facing whoever moved last.
+  const facing: Color = status.type === 'ongoing' ? sideToMove : opponentColor;
+  const baseFlip = isPBM ? myColor === 'B' : (prefs.autoRotate && facing === 'B');
+  const [shownBaseFlip, setShownBaseFlip] = useState(baseFlip);
+  useEffect(() => {
+    if (shownBaseFlip === baseFlip) return;
+    const t = setTimeout(() => setShownBaseFlip(baseFlip), isPBM ? 0 : ROTATE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [baseFlip, shownBaseFlip, isPBM]);
+  const [userFlip, setUserFlip] = useState(false);
+  const flipped = shownBaseFlip !== userFlip;
 
   const lastEntry = history[history.length - 1] ?? null;
   const lastMovePrimary = lastEntry?.turn.primary ?? null;
@@ -106,12 +151,24 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
   }, [stagedPrimary, gameState]);
   const isStaging = twinsStagingTurns !== null;
 
-  const { sideToMove, armies } = gameState;
-  const movingArmy = armies[sideToMove];
-  const opponentColor = sideToMove === 'W' ? 'B' : 'W';
-  const opponentArmy = armies[opponentColor];
-  const movingArmyColor = ARMY_ACCENTS[movingArmy];
-  const sideLabel = sideToMove === 'W' ? 'White' : 'Black';
+  // ── Sound / haptics on each new ply ──
+  const plyRef = useRef(history.length);
+  useEffect(() => {
+    const prev = plyRef.current;
+    plyRef.current = history.length;
+    if (history.length <= prev || !prefs.sound || !lastEntry) return;
+    const t = lastEntry.turn.primary.type;
+    if (status.type !== 'ongoing') playSound('end');
+    else if (inCheck) playSound('check');
+    else if (t === 'shatter' || t === 'rampage' || t === 'march' || t === 'teleport' || t === 'strike') playSound('special');
+    else if (lastEntry.captures.length > 0) playSound('capture');
+    else playSound('move');
+  }, [history.length, lastEntry, prefs.sound, status.type, inCheck]);
+
+  // A new game state can't still be dismissed-over (e.g. after an undo)
+  useEffect(() => {
+    if (status.type === 'ongoing') setEndDismissed(false);
+  }, [status.type]);
 
   // ── Derived board state ──
 
@@ -148,7 +205,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     return map;
   }, [selectedSquare, gameState.board, armies]);
 
-  // Shatter: Blast zone around shatterPreviewSq (shown in overlay, also colored on board)
+  // Shatter: Blast zone around shatterPreviewSq
   const blastSquares = useMemo((): Map<Square, OverlayKind> => {
     if (shatterPreviewSq === null) return new Map();
     const map = new Map<Square, OverlayKind>();
@@ -199,45 +256,112 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     return result;
   }, [displayState.board]);
 
+  // Slide/capture animation for the latest ply
+  const animation = useMemo((): BoardAnimation | null => {
+    if (!lastEntry) return null;
+    return { key: history.length, ...computeTurnAnimation(lastEntry.stateBefore, lastEntry.turn) };
+  }, [lastEntry, history.length]);
+
   // ── Hint message ──
   const hint = useMemo((): string | null => {
-    if (twinsStagingTurns !== null) return null; // rally bar carries the instruction
-    if (checkedSquares.length > 0) {
+    if (twinsStagingTurns !== null || status.type !== 'ongoing') return null;
+    if (inCheck && canAct) {
       if (movingArmy === 'Twins' && checkedSquares.length === 1) return HINTS.TWINS_WARLORD_IN_CHECK;
       if (movingArmy === 'Twins' && checkedSquares.length >= 2) return HINTS.TWINS_BOTH_IN_CHECK;
-      if (opponentArmy === 'Phantom') return HINTS.PIERCING_CHECK;
+      if (opponentArmy === 'Phantom' && isPiercingCheck(gameState)) return HINTS.PIERCING_CHECK;
+      return HINTS.CHECK;
     }
     if (selectedSquare !== null && exhaustedSquares.has(selectedSquare)) {
       const piece = gameState.board[selectedSquare];
       if (piece?.slot === 'B' && armies[piece.color] === 'Wild') return HINTS.STALKER_EXHAUSTED;
     }
-    if (
-      history.length === 0 &&
-      selectedSquare === null &&
-      (myColor === undefined || sideToMove === myColor)
-    ) return HINTS.FIRST_MOVE;
+    if (history.length === 0 && selectedSquare === null && canAct) return HINTS.FIRST_MOVE;
     return null;
-  }, [twinsStagingTurns, checkedSquares, movingArmy, opponentArmy, selectedSquare, exhaustedSquares, gameState.board, history.length, myColor, sideToMove, armies]);
+  }, [twinsStagingTurns, status.type, inCheck, canAct, movingArmy, checkedSquares, opponentArmy, gameState, selectedSquare, exhaustedSquares, armies, history.length]);
 
   // ── Selected-piece reminder ──
   const selectedPiece = selectedSquare !== null ? gameState.board[selectedSquare] : null;
 
   // ── Shatter legality for selected Warlord ──
   const shatterLegalForSelected = useMemo((): boolean => {
-    if (movingArmy !== 'Twins' || selectedSquare === null) return false;
+    if (!canAct || movingArmy !== 'Twins' || selectedSquare === null) return false;
     const piece = gameState.board[selectedSquare];
-    if (!piece || piece.slot !== 'K') return false;
+    if (!piece || piece.slot !== 'K' || piece.color !== sideToMove) return false;
     return allLegal.some(
       t => t.primary.type === 'shatter' && t.primary.warlordSquare === selectedSquare,
     );
-  }, [movingArmy, selectedSquare, allLegal, gameState.board]);
+  }, [canAct, movingArmy, selectedSquare, allLegal, gameState.board, sideToMove]);
 
-  // ── Click handler ──
-  // Whether the local player may act (always true in hotseat; PBM gates on color).
-  const canAct = myColor === undefined || gameState.sideToMove === myColor;
+  // ── Turn commitment ──
+
+  /** Route a fully chosen turn: previews for Rampage/March, rally staging for the Twins. */
+  function commitTurn(turn: Turn) {
+    setChooserTurns(null);
+    setSelectedSquare(null);
+    if (turn.primary.type === 'rampage') {
+      setRampagePreviewTurn(turn as Turn & { primary: RampageMove });
+      return;
+    }
+    if (turn.primary.type === 'march') {
+      setMarchPreviewTurn(turn as Turn & { primary: MarchMove });
+      return;
+    }
+    if (movingArmy === 'Twins' && turn.rally === undefined) {
+      const staging = allLegal.filter(t => primaryEq(t.primary, turn.primary));
+      if (staging.some(t => t.rally !== undefined)) {
+        setTwinsStagingTurns(staging);
+        return;
+      }
+    }
+    submitTurn(turn);
+  }
+
+  /** Try to play the selected piece from `from` to `dest`; false if that isn't a move. */
+  function tryMove(from: Square, dest: Square): boolean {
+    const destTurns = canAct ? turnsForMove(allLegal, from, dest) : [];
+    if (destTurns.length === 0) return false;
+    const first = destTurns[0];
+
+    // Tapping the selected Warlord again = Shatter (dest === from only exists for
+    // Shatter). Always route through the confirmation preview.
+    if (first.primary.type === 'shatter') {
+      setShatterPreviewSq(from);
+      return true;
+    }
+
+    // One option per distinct primary action (Twins rally variants collapse into one;
+    // the rally is chosen afterwards on the board).
+    const options: Turn[] = [];
+    for (const t of destTurns) {
+      const i = options.findIndex(o => primaryEq(o.primary, t.primary));
+      if (i === -1) options.push(t);
+      else if (options[i].rally !== undefined && t.rally === undefined) options[i] = t;
+    }
+
+    if (options.length === 1) {
+      const only = options[0];
+      // Friendly capture (Wild Bronco/Behemoth): single-item chooser carries the warning
+      if (only.primary.type === 'standard' && gameState.board[only.primary.to]?.color === sideToMove) {
+        setChooserTurns([only]);
+        setSelectedSquare(null);
+        return true;
+      }
+      commitTurn(only);
+      return true;
+    }
+
+    // Several actions share this destination (promotion pieces, Herald step vs March)
+    setChooserTurns(options);
+    setSelectedSquare(null);
+    return true;
+  }
 
   function handleSquareClick(sq: Square) {
-    if (status.type !== 'ongoing') return;
+    if (status.type !== 'ongoing') {
+      // Game over: tapping still inspects pieces
+      setSelectedSquare(gameState.board[sq] && sq !== selectedSquare ? sq : null);
+      return;
+    }
 
     // ── Rally phase (Twins staging) ──
     if (twinsStagingTurns !== null) {
@@ -255,71 +379,7 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
     }
 
     if (selectedSquare !== null) {
-      // Move submission is only available to the acting player; inspection
-      // (selecting pieces to read their info) is always available.
-      const destTurns = canAct ? turnsForMove(allLegal, selectedSquare, sq) : [];
-
-      if (destTurns.length > 0) {
-        const first = destTurns[0];
-
-        // Tapping the selected Warlord again = Shatter (dest === from only
-        // exists for Shatter). Always route through the confirmation preview —
-        // never silently destroy everything around the Warlord.
-        if (first.primary.type === 'shatter') {
-          setShatterPreviewSq(selectedSquare);
-          return;
-        }
-
-        // Rampage: always single turn per from→to; show preview
-        if (first.primary.type === 'rampage') {
-          setRampagePreviewTurn(first as Turn & { primary: RampageMove });
-          setSelectedSquare(null);
-          return;
-        }
-
-        // March as the only option (Herald plain move filtered out elsewhere):
-        // route through the confirmation preview. The common case — Herald step
-        // and March sharing a destination — falls through to the chooser below.
-        if (destTurns.length === 1 && first.primary.type === 'march') {
-          setMarchPreviewTurn(first as Turn & { primary: MarchMove });
-          setSelectedSquare(null);
-          return;
-        }
-
-        // Friendly standard capture (Wild Bronco/Behemoth capturing own piece)
-        if (
-          first.primary.type === 'standard' &&
-          gameState.board[first.primary.to]?.color === sideToMove &&
-          destTurns.length === 1
-        ) {
-          setChooserTurns(destTurns); // single-item chooser with warning description
-          setSelectedSquare(null);
-          return;
-        }
-
-        // Twins: enter staging if rallies are available
-        if (movingArmy === 'Twins' && destTurns.some(t => t.rally !== undefined)) {
-          const chosen = destTurns[0].primary;
-          const staging = allLegal.filter(t => primaryEq(t.primary, chosen));
-          if (staging.some(t => t.rally !== undefined)) {
-            setTwinsStagingTurns(staging);
-            setSelectedSquare(null);
-            return;
-          }
-        }
-
-        // Standard: single turn
-        if (destTurns.length === 1) {
-          submitTurn(destTurns[0]);
-          return;
-        }
-
-        // Multiple turns to same dest → chooser
-        setChooserTurns(destTurns);
-        setSelectedSquare(null);
-        return;
-      }
-
+      if (tryMove(selectedSquare, sq)) return;
       // Not a valid destination — toggle off, or inspect another piece.
       // Any piece (either color, with or without legal moves) can be selected
       // so its info bar is shown; only pieces with moves get destination dots.
@@ -327,78 +387,151 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         setSelectedSquare(null);
         return;
       }
-      const piece = gameState.board[sq];
-      setSelectedSquare(piece ? sq : null);
+      setSelectedSquare(gameState.board[sq] ? sq : null);
       return;
     }
 
     // No piece selected — tap any piece to select/inspect it
+    if (gameState.board[sq]) setSelectedSquare(sq);
+  }
+
+  function handleDragStart(sq: Square): boolean {
+    if (status.type !== 'ongoing' || isStaging || !canAct) return false;
     const piece = gameState.board[sq];
-    if (piece) setSelectedSquare(sq);
+    if (!piece || piece.color !== sideToMove) return false;
+    if (!allLegal.some(t => getPrimaryFrom(t) === sq)) return false;
+    setSelectedSquare(sq);
+    return true;
   }
 
-  function handleFlipToggle() {
-    if (autoFlip) {
-      setAutoFlip(false);
-      setLocked(true);
-      setManualFlipped(sideToMove === 'B');
-    } else {
-      if (locked) {
-        setLocked(false);
-        setManualFlipped((prev: boolean) => !prev);
-      } else {
-        setAutoFlip(true);
-      }
+  function handleDrop(from: Square, to: Square) {
+    if (!tryMove(from, to)) setSelectedSquare(from);
+  }
+
+  function cancelInteraction() {
+    setChooserTurns(null);
+    setShatterPreviewSq(null);
+    setRampagePreviewTurn(null);
+    setMarchPreviewTurn(null);
+    setTwinsStagingTurns(null);
+    setSelectedSquare(null);
+  }
+
+  const canUndo = onUndo !== undefined && history.length > 0;
+  function handleUndo() {
+    if (!canUndo) return;
+    cancelInteraction();
+    rawUndo();
+    onUndo?.();
+  }
+
+  // ── Keyboard shortcuts (desktop): Esc cancels, F flips, Ctrl/⌘+Z undoes ──
+  const shortcutRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  shortcutRef.current = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    if (e.key === 'Escape') cancelInteraction();
+    else if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey) setUserFlip(v => !v);
+    else if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && canUndo) {
+      e.preventDefault();
+      handleUndo();
     }
-  }
-
-  const flipLabel = autoFlip ? '⟳' : (locked ? '🔒' : '↕');
+  };
+  const sheetOpen = armyInfoOpen || chooserTurns !== null || shatterPreviewSq !== null ||
+    rampagePreviewTurn !== null || marchPreviewTurn !== null;
+  useEffect(() => {
+    if (!active || sheetOpen) return;
+    const onKey = (e: KeyboardEvent) => shortcutRef.current(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, sheetOpen]);
 
   // Essence delta from last turn (for animation)
   const essenceDelta = gameState.lastTurnMeta?.essenceDelta;
+
+  const toggles: SheetToggle[] = [
+    { label: 'Sound & vibration', value: prefs.sound, onChange: v => setPref('sound', v), testId: 'pref-sound' },
+  ];
+  if (!isPBM) {
+    toggles.unshift({
+      label: 'Rotate board to face the player to move',
+      value: prefs.autoRotate,
+      onChange: v => setPref('autoRotate', v),
+      testId: 'pref-autorotate',
+    });
+  }
+
+  const gameOver = status.type !== 'ongoing';
+  // Header: who moves — or, once it's over, who won
+  const headerColor: Color | null = status.type === 'win' ? status.winner : status.type === 'draw' ? null : sideToMove;
+  const headerTitle = headerColor ? ARMY_NAMES[armies[headerColor]] : 'Draw';
+  const turnLabel = status.type === 'win'
+    ? `${status.winner === 'W' ? 'White' : 'Black'} wins`
+    : gameOver ? 'Game over' : `${sideLabel} to move`;
 
   return (
     <div className="game-screen">
       {/* Header */}
       <header className="game-header">
         <button
-          className="game-header-home"
+          className="icon-btn game-header-home"
           onClick={onHome}
           aria-label="Go to home"
+          title="Home"
         >
           ←
         </button>
-        <div className="turn-indicator">
-          <div
-            className="turn-indicator-army"
-            style={{ color: movingArmyColor }}
-          >
-            {ARMY_NAMES[movingArmy]}
-          </div>
-          <div className="turn-indicator-label">
-            {sideLabel} to move
+        <div className="turn-indicator" aria-live="polite">
+          <span className={`turn-dot turn-dot-${headerColor ?? 'none'}`} aria-hidden />
+          <div className="turn-indicator-text">
+            <div
+              className="turn-indicator-army"
+              style={{ color: headerColor ? ARMY_ACCENTS[armies[headerColor]] : undefined }}
+            >
+              {headerTitle}
+            </div>
+            <div className="turn-indicator-label">
+              <span className="turn-indicator-label-text">{turnLabel}</span>
+              {inCheck && !gameOver && !isStaging && (
+                <span className="check-badge" data-testid="check-badge">Check</span>
+              )}
+              {isPBM && canAct && !gameOver && <span className="your-turn-badge">You</span>}
+            </div>
           </div>
         </div>
+        {onUndo && (
+          <button
+            className="icon-btn"
+            onClick={handleUndo}
+            disabled={!canUndo}
+            aria-label="Undo last move"
+            title="Undo last move (Ctrl+Z)"
+            data-testid="undo-btn"
+          >
+            ↶
+          </button>
+        )}
         <button
-          className="flip-btn"
-          onClick={handleFlipToggle}
-          aria-label={autoFlip ? 'Auto-flip on — tap to lock' : 'Tap to flip board'}
-          title={autoFlip ? 'Board auto-flips (tap to lock)' : 'Board locked (tap to flip)'}
+          className="icon-btn"
+          onClick={() => setUserFlip(v => !v)}
+          aria-label="Flip board"
+          title="Flip board (F)"
+          data-testid="flip-btn"
         >
-          {flipLabel}
+          ⇅
         </button>
         <button
-          className="flip-btn"
+          className="icon-btn"
           onClick={() => setArmyInfoOpen(true)}
-          aria-label="About these armies"
-          title="About these armies"
+          aria-label="Armies and settings"
+          title="Armies and settings"
           data-testid="army-info-btn"
         >
           ⓘ
         </button>
         {onRules && (
           <button
-            className="flip-btn"
+            className="icon-btn"
             onClick={() => onRules('')}
             aria-label="Open rules"
             title="Rules"
@@ -409,108 +542,134 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
         )}
       </header>
 
-      {/* Hint bar */}
-      <HintBar message={hint} />
-
-      {/* Selected-piece reminder (shown for any tapped piece, even without moves) */}
-      {selectedPiece && twinsStagingTurns === null && (() => {
-        const pArmy = armies[selectedPiece.color];
-        const note = selectedPiece.color !== sideToMove
-          ? HINTS.INSPECT_WAITING
-          : (legalMovesForSelected.length === 0 ? HINTS.NO_LEGAL_MOVES : null);
-        return (
-          <div className="piece-info-bar" data-testid="piece-info">
-            <span
-              className="piece-info-icon"
-              style={{ color: PIECE_COLORS[pArmy][selectedPiece.color] }}
-              aria-hidden
-            >
-              <PieceIcon slot={selectedPiece.slot} color={selectedPiece.color} army={pArmy} />
-            </span>
-            <span className="piece-info-text">
-              <strong className="piece-info-name" style={{ color: ARMY_ACCENTS[pArmy] }}>
-                {getSlotName(selectedPiece.slot, pArmy)}
-                {note && <span className="piece-info-note"> · {note}</span>}
-              </strong>
-              <span className="piece-info-desc">
-                {getPieceInfo(selectedPiece.slot, pArmy)}
-              </span>
-            </span>
+      <div className="game-body">
+        {/* Board — during Twins staging, shows the position after the chosen
+            primary action so the rally dots match what the player sees. */}
+        <div className="board-area">
+          <div className="board-wrapper">
+            <Board
+              gameState={displayState}
+              flipped={flipped}
+              selectedSquare={isStaging ? null : selectedSquare}
+              legalMovesForSelected={isStaging || !canAct ? [] : legalMovesForSelected}
+              lastMovePrimary={isStaging ? stagedPrimary : lastMovePrimary}
+              checkedSquares={isStaging ? [] : checkedSquares}
+              onSquareClick={handleSquareClick}
+              overlaySquares={overlaySquares}
+              rallyTurns={twinsStagingTurns ?? undefined}
+              empoweredSquares={empoweredSquares}
+              exhaustedSquares={exhaustedSquares}
+              invasionSquares={invasionSquares}
+              onDragStart={handleDragStart}
+              onDrop={handleDrop}
+              animation={isStaging ? null : animation}
+              onEscape={cancelInteraction}
+            />
           </div>
-        );
-      })()}
-
-      {/* Shatter mode button (shown when Warlord selected and shatter is legal) */}
-      {shatterLegalForSelected && shatterPreviewSq === null && twinsStagingTurns === null && (
-        <div className="shatter-bar">
-          <button
-            className="btn shatter-btn"
-            onClick={() => setShatterPreviewSq(selectedSquare!)}
-            data-testid="shatter-mode-btn"
-          >
-            💥 {HINTS.SHATTER}
-          </button>
-          <span className="shatter-bar-desc">{HINTS.TWINS_SHATTER_DESC}</span>
         </div>
-      )}
 
-      {/* Rally bar (shown during Twins staging phase) */}
-      {twinsStagingTurns !== null && (
-        <div className="rally-bar" data-testid="rally-bar">
-          <button
-            className="btn btn-ghost"
-            onClick={() => setTwinsStagingTurns(null)}
-            data-testid="rally-back"
-          >
-            {HINTS.BACK}
-          </button>
-          <span className="rally-bar-hint">{HINTS.TWINS_RALLY_PHASE}</span>
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              const skipTurn = twinsStagingTurns.find((t: Turn) => t.rally === undefined);
-              if (skipTurn) submitTurn(skipTurn);
-              setTwinsStagingTurns(null);
-            }}
-            data-testid="rally-skip"
-          >
-            {HINTS.SKIP_RALLY}
-          </button>
+        {/* Context strip: what's happening right now. Sits below the board in portrait
+            (so it never pushes the board around) and atop the sidebar on wide screens. */}
+        <div className="context-strip">
+          {status.type === 'ongoing' && isPBM && !canAct && (
+            <div className="pbm-waiting-banner" data-testid="waiting-banner">
+              <span>Waiting for {opponentLabel || 'your opponent'}'s move…</span>
+              {onShare && history.length > 0 && (
+                <button className="btn btn-secondary btn-small" onClick={onShare} data-testid="reshare-btn">
+                  Share link again
+                </button>
+              )}
+            </div>
+          )}
+
+          {gameOver && endDismissed && (
+            <div className="game-over-banner" data-testid="game-over-banner">
+              <span>{resultSummary(status, armies)}</span>
+              <button className="btn btn-secondary btn-small" onClick={() => setEndDismissed(false)}>
+                Options
+              </button>
+            </div>
+          )}
+
+          <HintBar message={hint} />
+
+          {/* Rally bar (shown during Twins staging phase) */}
+          {twinsStagingTurns !== null && (
+            <div className="rally-bar" data-testid="rally-bar">
+              <button
+                className="btn btn-ghost btn-small"
+                onClick={() => setTwinsStagingTurns(null)}
+                data-testid="rally-back"
+              >
+                {HINTS.BACK}
+              </button>
+              <span className="rally-bar-hint">{HINTS.TWINS_RALLY_PHASE}</span>
+              <button
+                className="btn btn-secondary btn-small"
+                onClick={() => {
+                  const skipTurn = twinsStagingTurns.find((t: Turn) => t.rally === undefined);
+                  if (skipTurn) submitTurn(skipTurn);
+                  setTwinsStagingTurns(null);
+                }}
+                data-testid="rally-skip"
+              >
+                {HINTS.SKIP_RALLY}
+              </button>
+            </div>
+          )}
+
+          {/* Selected-piece reminder (shown for any tapped piece, even without moves) */}
+          {selectedPiece && twinsStagingTurns === null && (() => {
+            const pArmy = armies[selectedPiece.color];
+            const note = gameOver ? null
+              : selectedPiece.color !== sideToMove || !canAct
+                ? HINTS.INSPECT_WAITING
+                : (legalMovesForSelected.length === 0 ? HINTS.NO_LEGAL_MOVES : null);
+            return (
+              <div className="piece-info-bar" data-testid="piece-info">
+                <span
+                  className="piece-info-icon"
+                  style={{ color: PIECE_COLORS[pArmy][selectedPiece.color] }}
+                  aria-hidden
+                >
+                  <PieceIcon slot={selectedPiece.slot} color={selectedPiece.color} army={pArmy} />
+                </span>
+                <span className="piece-info-text">
+                  <strong className="piece-info-name" style={{ color: ARMY_ACCENTS[pArmy] }}>
+                    {getSlotName(selectedPiece.slot, pArmy)}
+                    {note && <span className="piece-info-note"> · {note}</span>}
+                  </strong>
+                  <span className="piece-info-desc">
+                    {getPieceInfo(selectedPiece.slot, pArmy)}
+                  </span>
+                </span>
+                {/* Shatter (Warlord selected and Shatter legal) */}
+                {shatterLegalForSelected && shatterPreviewSq === null && (
+                  <button
+                    className="btn shatter-btn"
+                    onClick={() => setShatterPreviewSq(selectedSquare!)}
+                    title={HINTS.TWINS_SHATTER_DESC}
+                    data-testid="shatter-mode-btn"
+                  >
+                    💥 {HINTS.SHATTER}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
-      )}
 
-      {/* Board — during Twins staging, shows the position after the chosen
-          primary action so the rally dots match what the player sees. */}
-      <div className="board-wrapper">
-        <Board
-          gameState={displayState}
-          flipped={flipped}
-          selectedSquare={isStaging ? null : selectedSquare}
-          legalMovesForSelected={isStaging ? [] : legalMovesForSelected}
-          lastMovePrimary={isStaging ? stagedPrimary : lastMovePrimary}
-          checkedSquares={isStaging ? [] : checkedSquares}
-          onSquareClick={handleSquareClick}
-          overlaySquares={overlaySquares}
-          rallyTurns={twinsStagingTurns ?? undefined}
-          empoweredSquares={empoweredSquares}
-          exhaustedSquares={exhaustedSquares}
-          invasionSquares={invasionSquares}
-        />
-      </div>
-
-      {/* Chrome */}
-      <div className="game-chrome">
-        <CapturedPieceTray captured={captured} armies={armies} />
-        <EssenceMeter essence={gameState.essence} armies={armies} essenceDelta={essenceDelta} />
-        <MoveListPanel history={history} />
-        <SanInput
-          gameState={gameState}
-          disabled={
-            status.type !== 'ongoing' ||
-            (myColor !== undefined && gameState.sideToMove !== myColor)
-          }
-          onSubmit={submitTurn}
-        />
+        {/* Chrome */}
+        <div className="game-chrome">
+          <CapturedPieceTray captured={captured} armies={armies} />
+          <EssenceMeter essence={gameState.essence} armies={armies} essenceDelta={essenceDelta} />
+          <MoveListPanel history={history} />
+          <SanInput
+            gameState={gameState}
+            disabled={gameOver || !canAct || isStaging}
+            onSubmit={turn => { cancelInteraction(); submitTurn(turn); }}
+          />
+        </div>
       </div>
 
       {/* Shatter preview */}
@@ -569,49 +728,41 @@ export function GameScreen({ armyW, armyB, initialSfen, myColor, onTurnSubmitted
           turns={chooserTurns}
           gameState={gameState}
           onSelect={turn => {
-            // If selected from chooser is a rampage or march, show preview first
-            if (turn.primary.type === 'rampage') {
-              setRampagePreviewTurn(turn as Turn & { primary: RampageMove });
+            // Rally variants arrive here already complete; everything else may still
+            // need a preview (Rampage/March) or a rally (Twins).
+            if (turn.rally !== undefined) {
               setChooserTurns(null);
-              return;
+              submitTurn(turn);
+            } else {
+              commitTurn(turn);
             }
-            if (turn.primary.type === 'march') {
-              setMarchPreviewTurn(turn as Turn & { primary: MarchMove });
-              setChooserTurns(null);
-              return;
-            }
-            submitTurn(turn);
-            setChooserTurns(null);
           }}
           onCancel={() => setChooserTurns(null)}
         />
       )}
 
-      {/* Army info sheet */}
+      {/* Army info + settings sheet */}
       {armyInfoOpen && (
         <ArmyInfoSheet
           armies={armies}
           onRules={onRules ? anchor => { setArmyInfoOpen(false); onRules(anchor); } : undefined}
           onClose={() => setArmyInfoOpen(false)}
+          toggles={toggles}
         />
       )}
 
       {/* End modal */}
-      {status.type !== 'ongoing' && (
+      {gameOver && !endDismissed && (
         <GameEndModal
           status={status}
           armies={armies}
           onReview={onReview ?? (() => {})}
           onNewGame={onNewGame}
+          onRematch={onRematch}
+          onUndo={canUndo ? handleUndo : undefined}
+          onClose={() => setEndDismissed(true)}
           onRules={onRules}
         />
-      )}
-
-      {/* PBM waiting banner */}
-      {status.type === 'ongoing' && myColor !== undefined && gameState.sideToMove !== myColor && (
-        <div className="pbm-waiting-banner" data-testid="waiting-banner">
-          Waiting for opponent's move…
-        </div>
       )}
     </div>
   );

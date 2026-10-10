@@ -25,7 +25,7 @@ test.describe('Invasion win via ?sfen= dev loader', () => {
     await expect(page.getByText(/midline/i)).toBeVisible();
   });
 
-  test('after invasion, New game button returns to home', async ({ page }) => {
+  test('after invasion, New game starts the army pick for a fresh local game', async ({ page }) => {
     const sfenEncoded = encodeURIComponent(INVASION_SFEN);
     await page.goto(`/schism-chess/?sfen=${sfenEncoded}`);
 
@@ -34,6 +34,6 @@ test.describe('Invasion win via ?sfen= dev loader', () => {
 
     await expect(page.getByText('The Crown wins')).toBeVisible({ timeout: 5000 });
     await page.getByRole('button', { name: 'New game' }).click();
-    await expect(page.getByText('Schism Chess')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Choose your army' })).toBeVisible();
   });
 });

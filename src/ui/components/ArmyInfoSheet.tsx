@@ -6,18 +6,30 @@ import {
   ARMY_RULE_ANCHORS,
   ARMY_TAGLINES,
 } from '../shared';
+import { useSheetKeys } from './useSheetKeys';
+
+export interface SheetToggle {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  testId?: string;
+}
 
 interface Props {
   armies: { W: Army; B: Army };
   onRules?: (anchor: string) => void;
   onClose: () => void;
+  /** Device preferences shown under the army cards (sound, auto-rotate, …). */
+  toggles?: SheetToggle[];
 }
 
 /**
  * Bottom sheet summarizing the two armies in play: name, tagline, and a
- * short identity blurb, with deep links into the full rules.
+ * short identity blurb, with deep links into the full rules — plus the
+ * game's display/sound settings.
  */
-export function ArmyInfoSheet({ armies, onRules, onClose }: Props) {
+export function ArmyInfoSheet({ armies, onRules, onClose, toggles }: Props) {
+  useSheetKeys(onClose);
   const colors: Color[] = ['W', 'B'];
   return (
     <div className="chooser-overlay" onClick={onClose} data-testid="army-info-sheet">
@@ -25,8 +37,10 @@ export function ArmyInfoSheet({ armies, onRules, onClose }: Props) {
         className="chooser-sheet"
         onClick={e => e.stopPropagation()}
         role="dialog"
+        aria-modal
         aria-label="Armies in this game"
       >
+        <div className="sheet-grip" aria-hidden />
         <div className="chooser-title">Armies in this game</div>
         <div className="army-info-list">
           {colors.map(color => {
@@ -59,6 +73,22 @@ export function ArmyInfoSheet({ armies, onRules, onClose }: Props) {
           Win by checkmate — or walk your King (both Warlords, for the Twins)
           across the dashed midline while not in check. Stalemate loses.
         </p>
+        {toggles && toggles.length > 0 && (
+          <div className="sheet-settings">
+            {toggles.map(t => (
+              <label key={t.label} className="sheet-toggle">
+                <span>{t.label}</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={t.value}
+                  onChange={e => t.onChange(e.target.checked)}
+                  data-testid={t.testId}
+                />
+              </label>
+            ))}
+          </div>
+        )}
         <button className="chooser-cancel" onClick={onClose} data-testid="army-info-close">
           Close
         </button>

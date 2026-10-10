@@ -24,6 +24,28 @@ function updateCastlingRights(rights: string, from: Square, to: Square): string 
   return r.length > 0 ? r : '-';
 }
 
+// A castling right also lapses whenever its king or corner rook is no longer in place,
+// however it left — a Stalker Strike or a Shatter removes a rook without a from/to on
+// its square, which updateCastlingRights cannot see.
+const CASTLING_SQUARES: Record<string, { color: Color; king: Square; rook: Square }> = {
+  K: { color: 'W', king: 4, rook: 7 },
+  Q: { color: 'W', king: 4, rook: 0 },
+  k: { color: 'B', king: 60, rook: 63 },
+  q: { color: 'B', king: 60, rook: 56 },
+};
+
+function revokeLostCastlingRights(rights: string, board: GameState['board']): string {
+  if (rights === '-') return rights;
+  let r = '';
+  for (const ch of rights) {
+    const req = CASTLING_SQUARES[ch];
+    if (!req) continue;
+    const k = board[req.king], rk = board[req.rook];
+    if (k?.slot === 'K' && k.color === req.color && rk?.slot === 'R' && rk.color === req.color) r += ch;
+  }
+  return r.length > 0 ? r : '-';
+}
+
 export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
   const primary = turn.primary;
   const moverColor = state.sideToMove;
@@ -41,7 +63,10 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     const { from, to, promotion } = mv;
     const piece = board[from]!;
 
-    const isEnPassant = piece.slot === 'P' && to === state.enPassantTarget;
+    // Phantom Thralls neither give nor take en passant — a homing step onto the ep
+    // square is a plain move.
+    const isEnPassant = piece.slot === 'P' && moverArmy !== 'Phantom' &&
+      to === state.enPassantTarget && (from & 7) !== (to & 7);
     const isCastling = piece.slot === 'K' && Math.abs((to & 7) - (from & 7)) === 2;
     const capturedPiece = isEnPassant
       ? board[moverColor === 'W' ? to - 8 : to + 8]
@@ -169,26 +194,26 @@ export function applyTurnUnchecked(state: GameState, turn: Turn): GameState {
     throw new Error(`applyTurnUnchecked: unsupported move type '${(primary as { type: string }).type}'`);
   }
 
-  // Stalker exhaustion lifecycle:
-  // - Clear exhaustion for any square where the current mover's Stalker was exhausted
-  //   (their one-turn restriction has now been served).
-  // - Also clear squares where the Stalker was captured (no piece there anymore).
-  // - If this turn was a StrikeMove, mark the Stalker's home square as exhausted for next turn.
-  const newExhausted: Square[] = state.exhausted.filter(sq => {
-    const p = state.board[sq]; // use pre-move board
-    if (!p) return false; // piece gone (captured by opponent previously) — drop
-    if (p.color === moverColor && p.slot === 'B') return false; // mover's exhaustion expires
-    return true; // opponent's exhaustion carries over until their next turn
-  });
-  if (primary.type === 'strike') {
-    newExhausted.push((primary as StrikeMove).from);
-  }
-
   // Apply optional rally step (Twins bonus move: one Warlord one step, non-capturing)
   if (turn.rally) {
     board[turn.rally.to] = board[turn.rally.from];
     board[turn.rally.from] = null;
     // Rally does not affect halfmoveClock, enPassantTarget, castlingRights, or essence
+  }
+
+  castlingRights = revokeLostCastlingRights(castlingRights, board);
+
+  // Stalker exhaustion lifecycle. An entry belongs to the Stalker standing on it, so it
+  // survives only while an opponent B-slot piece still occupies the square after this
+  // turn: the mover's own exhaustion expires (served), and a Stalker that was captured
+  // takes its mark with it — the capturer never inherits it.
+  // If this turn was a StrikeMove, mark the Stalker's home square for next turn.
+  const newExhausted: Square[] = state.exhausted.filter(sq => {
+    const p = board[sq];
+    return p !== null && p.color !== moverColor && p.slot === 'B';
+  });
+  if (primary.type === 'strike') {
+    newExhausted.push((primary as StrikeMove).from);
   }
 
   const sideToMove: Color = moverColor === 'W' ? 'B' : 'W';

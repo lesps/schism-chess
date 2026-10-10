@@ -11,12 +11,10 @@ import {
 } from '../../engine';
 import type { GameStatus } from '../../engine/status';
 import { extractCaptures, getPrimaryDest, getPrimaryFrom } from '../shared';
+import { capturedFromHistory, rebuildGame } from '../gameRecord';
+import type { HistoryEntry } from '../gameRecord';
 
-export interface HistoryEntry {
-  san: string;
-  turn: Turn;
-  stateBefore: GameState;
-}
+export type { HistoryEntry } from '../gameRecord';
 
 export interface GameLogic {
   gameState: GameState;
@@ -29,29 +27,39 @@ export interface GameLogic {
   checkedSquares: Square[];
   setSelectedSquare: (sq: Square | null) => void;
   submitTurn: (turn: Turn) => void;
+  /** Take back the last turn. No-op when there is nothing to undo. */
+  undo: () => void;
 }
 
-function makeInitialState(armyW: Army, armyB: Army, initialSfen?: string): GameState {
-  if (initialSfen) {
-    return parseSfen(initialSfen);
+export interface GameSource {
+  /** Flat per-ply SAN list to replay from the initial position (resume / import). */
+  initialMoves?: readonly string[];
+  /** Start from an arbitrary position instead (DEV `?sfen=` loader). */
+  initialSfen?: string;
+}
+
+interface Played {
+  state: GameState;
+  history: HistoryEntry[];
+}
+
+function initialPlayed(armyW: Army, armyB: Army, source: GameSource): Played {
+  if (source.initialSfen) return { state: parseSfen(source.initialSfen), history: [] };
+  if (source.initialMoves && source.initialMoves.length > 0) {
+    const { state, history } = rebuildGame(armyW, armyB, source.initialMoves);
+    return { state, history };
   }
-  return initialState(armyW, armyB);
+  return { state: initialState(armyW, armyB), history: [] };
 }
 
-export function useGameLogic(
-  armyW: Army,
-  armyB: Army,
-  initialSfen?: string,
-): GameLogic {
-  const [gameState, setGameState] = useState<GameState>(() =>
-    makeInitialState(armyW, armyB, initialSfen),
-  );
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [captured, setCaptured] = useState<{ W: Piece[]; B: Piece[] }>({ W: [], B: [] });
+export function useGameLogic(armyW: Army, armyB: Army, source: GameSource = {}): GameLogic {
+  const [played, setPlayed] = useState<Played>(() => initialPlayed(armyW, armyB, source));
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const { state: gameState, history } = played;
 
   const allLegal = useMemo(() => legalTurns(gameState), [gameState]);
   const status   = useMemo(() => gameStatus(gameState),  [gameState]);
+  const captured = useMemo(() => capturedFromHistory(history), [history]);
 
   const legalMovesForSelected = useMemo(() => {
     if (selectedSquare === null) return [];
@@ -67,15 +75,21 @@ export function useGameLogic(
 
   function submitTurn(turn: Turn) {
     const san = turnToSan(gameState, turn);
-    const caps = extractCaptures(gameState, turn);
+    const captures = extractCaptures(gameState, turn);
     const newState = applyTurn(gameState, turn);
-
-    setHistory(prev => [...prev, { san, turn, stateBefore: gameState }]);
-    setCaptured(prev => ({
-      W: [...prev.W, ...caps.filter(p => p.color === 'W')],
-      B: [...prev.B, ...caps.filter(p => p.color === 'B')],
+    setPlayed(prev => ({
+      state: newState,
+      history: [...prev.history, { san, turn, stateBefore: prev.state, captures }],
     }));
-    setGameState(newState);
+    setSelectedSquare(null);
+  }
+
+  function undo() {
+    setPlayed(prev => {
+      const last = prev.history[prev.history.length - 1];
+      if (!last) return prev;
+      return { state: last.stateBefore, history: prev.history.slice(0, -1) };
+    });
     setSelectedSquare(null);
   }
 
@@ -90,6 +104,7 @@ export function useGameLogic(
     checkedSquares,
     setSelectedSquare,
     submitTurn,
+    undo,
   };
 }
 

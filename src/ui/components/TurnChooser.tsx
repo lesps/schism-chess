@@ -4,6 +4,7 @@ import { PIECE_COLORS, getSlotName } from '../shared';
 import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
 import { turnToSan } from '../../engine';
+import { useSheetKeys } from './useSheetKeys';
 
 interface Props {
   turns: Turn[];
@@ -13,15 +14,18 @@ interface Props {
 }
 
 export function TurnChooser({ turns, gameState, onSelect, onCancel }: Props) {
+  useSheetKeys(onCancel);
   return (
     <div className="chooser-overlay" onClick={onCancel} data-testid="turn-chooser">
       <div
         className="chooser-sheet"
         onClick={e => e.stopPropagation()}
         role="dialog"
+        aria-modal
         aria-label="Choose move"
       >
-        <div className="chooser-title">Choose</div>
+        <div className="sheet-grip" aria-hidden />
+        <div className="chooser-title">Choose a move</div>
         <div className="chooser-options">
           {turns.map((turn, i) => {
             const { label, glyph, glyphColor, desc } = describeOption(turn, gameState);
@@ -79,7 +83,7 @@ function describeOption(turn: Turn, state: GameState): OptionDesc {
 
   // Shatter
   if (p.type === 'shatter') {
-    return { label: 'Shatter', glyph: '💥', glyphColor: null, desc: 'Destroys every piece around this Warlord — friend and foe' };
+    return { label: 'Shatter', glyph: '💥', glyphColor: null, desc: HINTS.TWINS_SHATTER_DESC };
   }
 
   // March (Accord v2.3): the Herald leads the whole Banner one step
@@ -98,6 +102,11 @@ function describeOption(turn: Turn, state: GameState): OptionDesc {
     const san = turnToSan(state, turn);
     const rallyDesc = `Rally to ${rallySquareName(turn.rally.to)}`;
     return { label: san, glyph: null, glyphColor: null, desc: rallyDesc };
+  }
+
+  // Herald plain step (offered next to the March)
+  if (p.type === 'standard' && state.board[p.from]?.slot === 'Q' && army === 'Accord') {
+    return { label: 'Move the Herald alone', glyph: null, glyphColor: null, desc: turnToSan(state, turn) };
   }
 
   // Generic fallback

@@ -588,3 +588,15 @@ describe('Thrall promotion', () => {
     expect(hasMoveAnyPromo(turns, 'd7', 'e8')).toBe(true);
   });
 });
+
+describe('isPiercingCheck (UI hint helper)', () => {
+  it('is true only when the Shade itself has line of sight to the checked king', async () => {
+    const { parseSfen, isPiercingCheck } = await import('../../src/engine/index');
+    // Shade e6 → Black king e8, clear file: piercing.
+    expect(isPiercingCheck(parseSfen('4k3/8/4Q3/8/8/8/8/K7/b/Phantom,Crown/-/-/0,0/-/0/1'))).toBe(true);
+    // A Phantom rook checks e8 instead; the Shade sits off-line on a3: ordinary check.
+    expect(isPiercingCheck(parseSfen('4k3/8/8/8/8/Q7/8/K3R3/b/Phantom,Crown/-/-/0,0/-/0/1'))).toBe(false);
+    // Not facing the Phantom at all.
+    expect(isPiercingCheck(parseSfen('4k3/8/4Q3/8/8/8/8/K7/b/Crown,Crown/-/-/0,0/-/0/1'))).toBe(false);
+  });
+});

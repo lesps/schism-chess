@@ -15,24 +15,25 @@ Run through this checklist after any change to `src/ui/`. Use the dev server (`n
 ## Twins (any Twins matchup)
 
 ### Shatter
-- [ ] Select a Warlord → a "💥 Shatter" button bar appears below the board.
+- [ ] Select a Warlord → a "💥 Shatter" button appears in the piece-info bar below the board (tapping the selected Warlord again does the same).
 - [ ] Clicking Shatter opens the `ShatterPreview` overlay.
 - [ ] The overlay lists all adjacent pieces (friendly with amber warning, enemy normally).
 - [ ] Clicking **Cancel** closes the overlay and returns to normal selection.
 - [ ] Clicking **Confirm** executes the shatter:
   - If rally is available → rally bar appears.
   - If no rally possible → turn advances immediately.
-- [ ] Shatter button does **not** appear when the two Warlords are adjacent to each other.
+- [ ] Shatter is still offered when the two Warlords stand side by side — the preview never lists a Warlord or King (royals are spared, v2.2).
 
 ### Rally
-- [ ] After any Warlord primary action (move or shatter) that has rally variants, a **rally bar** appears at top showing "Rally: move a Warlord one step, or skip."
+- [ ] After any primary action that has rally variants, a **rally bar** appears below the board: "Rally (optional): tap a pink dot to step a Warlord one square, or skip."
 - [ ] Board shows `hl-rally` (red dot) highlights on valid rally destinations.
 - [ ] Clicking a rally destination submits the full turn.
 - [ ] Clicking **Skip Rally** submits the turn with no rally.
 - [ ] Clicking **← Back** cancels the staging phase without submitting (board reverts to White-to-move state with no selection).
 
 ### Check feedback
-- [ ] When exactly one Warlord is in check, the hint bar shows "Warlord in check — primary move must resolve it."
+- [ ] When exactly one Warlord is in check, the hint bar shows "Warlord in check — your main move alone must escape it. Rally cannot save a lone checked Warlord." and the header shows a red **Check** badge.
+- [ ] A Twins pawn promoting with a Rally available first asks which piece (Rook / Bishop / Knight), then offers the Rally.
 
 ---
 
@@ -55,7 +56,8 @@ Run through this checklist after any change to `src/ui/`. Use the dev server (`n
 - [ ] Diagonal capture shows standard `hl-capture` ring.
 
 ### Piercing check
-- [ ] When it is the Crown/other-army's turn and the Phantom Shade gives check, the hint bar shows "Piercing check — interposition impossible."
+- [ ] When the Phantom Shade gives check, the hint bar shows "Piercing check — blocking is impossible. Move your King or capture the Shade."
+- [ ] A check from a Phantom rook/bishop/knight (not the Shade) shows the plain "Check!" hint instead — blocking it is legal.
 - [ ] Only king-move destinations and the Shade-capture square are highlighted; no interpose squares are shown.
 
 ---
@@ -73,7 +75,7 @@ Run through this checklist after any change to `src/ui/`. Use the dev server (`n
 - [ ] If the Herald is captured or moves away, the badge disappears on the opponent's next view.
 
 ### The March (v2.3)
-- [ ] Tapping the Herald then an empty adjacent square offers "Move" vs "March" in the chooser when another Banner piece can step.
+- [ ] Tapping the Herald then an empty adjacent square offers "Move the Herald alone" vs "March" in the chooser when another Banner piece can step.
 - [ ] The March preview lists every piece that will step and its destination; confirming steps the whole formation; blocked pieces hold; nothing is captured.
 
 ### Herald moves
@@ -98,10 +100,11 @@ Run through this checklist after any change to `src/ui/`. Use the dev server (`n
 ### Exhausted Stalker
 - [ ] After a Stalker makes a strike capture, its home square is added to `exhausted`.
 - [ ] On the next turn, the Stalker at the exhausted square shows a **⊗ badge** (`piece-badge-exhausted`) and renders at 50% opacity.
-- [ ] Selecting the exhausted Stalker shows the hint "Exhausted — cannot capture this turn."
+- [ ] Selecting the exhausted Stalker shows the hint "Stalker is Exhausted — it may move this turn, but not capture."
 - [ ] No capture highlights (`hl-special` for strike) appear for the exhausted Stalker.
 - [ ] Non-capture diagonal moves still show `hl-move`.
 - [ ] On the turn after exhaustion, the badge disappears and captures are legal again.
+- [ ] If the opponent captures the exhausted Stalker, the capturing piece is **not** shown exhausted.
 
 ### Friendly captures (Bronco / Behemoth)
 - [ ] Wild pieces that can capture friendly pieces show those destinations with `hl-friendly-capture` (amber ring).
@@ -114,5 +117,5 @@ Run through this checklist after any change to `src/ui/`. Use the dev server (`n
 - [ ] **Twins vs Crown**: complete a game that includes a Shatter, a rally, and a Twins invasion win.
 - [ ] **Veil vs Crown**: complete a game that includes a teleport-capture and an Essence change.
 - [ ] **Phantom vs Crown**: complete a game where the Phantom Shade gives check, and the opponent captures the Shade to escape.
-- [ ] **Accord vs Crown**: complete a game where an Empowered piece delivers checkmate or invasion.
+- [ ] **Accord vs Crown**: complete a game where a piece in Concord delivers checkmate or invasion.
 - [ ] **Wild vs Crown**: complete a game with a Rampage and an Exhausted Stalker turn.

@@ -31,7 +31,7 @@ export type { ThreatModel } from './threat';
 export { registerThreatModel, getThreatModel, fideThreatModel } from './threat';
 
 export { registerGenerator, fideGenerator, availablePromotions } from './movegen';
-export { THRALL_HOMING_TWINS } from './phantom';
+export { THRALL_HOMING_TWINS, isPiercingCheck } from './phantom';
 export { bannerZone, concordPool, computeMarch } from './accord';
 export type { MarchStep } from './accord';
 

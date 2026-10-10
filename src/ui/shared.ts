@@ -1,4 +1,5 @@
 import type { Army, Color, GameState, Piece, PrimaryAction, Slot, Square, Turn } from '../engine/types';
+import { computeMarch } from '../engine/accord';
 
 // ─── Army metadata ───────────────────────────────────────────────────────────
 
@@ -317,60 +318,92 @@ export function squareNeighbors(sq: Square): Square[] {
 
 // ─── Captures ─────────────────────────────────────────────────────────────────
 
-export function extractCaptures(state: GameState, turn: Turn): Piece[] {
+/** Squares whose pieces this turn removes (in the position before it). */
+export function captureSquares(state: GameState, turn: Turn): Square[] {
   const { board, enPassantTarget, sideToMove } = state;
-  const captures: Piece[] = [];
   const p = turn.primary;
-
   switch (p.type) {
     case 'standard': {
-      const target = board[p.to];
-      if (target) {
-        captures.push(target);
-      } else if (enPassantTarget !== null && p.to === enPassantTarget) {
-        const dir = sideToMove === 'W' ? -8 : 8;
-        const ep = board[p.to + dir];
-        if (ep) captures.push(ep);
+      if (board[p.to]) return [p.to];
+      const mover = board[p.from];
+      // Phantom Thralls never capture en passant (a homing step onto the ep square is a move)
+      if (mover?.slot === 'P' && state.armies[sideToMove] !== 'Phantom' &&
+          enPassantTarget !== null && p.to === enPassantTarget && (p.from & 7) !== (p.to & 7)) {
+        const epSq = p.to + (sideToMove === 'W' ? -8 : 8);
+        return board[epSq] ? [epSq] : [];
+      }
+      return [];
+    }
+    case 'teleport':
+      return p.isCapture && board[p.to] ? [p.to] : [];
+    case 'shatter':
+      // royals are spared by Shatter
+      return squareNeighbors(p.warlordSquare).filter(sq => board[sq] !== null && board[sq]!.slot !== 'K');
+    case 'rampage':
+      return p.captures.filter(sq => board[sq] !== null);
+    case 'strike':
+      return board[p.target] ? [p.target] : [];
+    case 'march':
+      return []; // the March never captures
+  }
+}
+
+export function extractCaptures(state: GameState, turn: Turn): Piece[] {
+  return captureSquares(state, turn).map(sq => state.board[sq]!);
+}
+
+// ─── Move animation ───────────────────────────────────────────────────────────
+
+export interface TurnAnimation {
+  /** destination square → origin square, for every piece that slid this turn */
+  slides: Map<Square, Square>;
+  /** squares where a piece appeared without sliding (teleports) */
+  appears: Square[];
+  /** squares where a piece was removed (capture burst) */
+  impacts: Square[];
+}
+
+/** Describe how the pieces moved during `turn` so the board can animate it. */
+export function computeTurnAnimation(stateBefore: GameState, turn: Turn): TurnAnimation {
+  const slides = new Map<Square, Square>();
+  const appears: Square[] = [];
+  const impacts = captureSquares(stateBefore, turn);
+  const p = turn.primary;
+  switch (p.type) {
+    case 'standard': {
+      slides.set(p.to, p.from);
+      const piece = stateBefore.board[p.from];
+      if (piece?.slot === 'K' && Math.abs((p.to & 7) - (p.from & 7)) === 2) {
+        const rank = p.from >> 3;
+        const kingSide = (p.to & 7) > (p.from & 7);
+        slides.set(rank * 8 + (kingSide ? 5 : 3), rank * 8 + (kingSide ? 7 : 0));
       }
       break;
     }
     case 'teleport':
-      if (p.isCapture) {
-        const t = board[p.to];
-        if (t) captures.push(t);
-      }
+      appears.push(p.to);
       break;
-    case 'shatter': {
-      const wf = p.warlordSquare % 8;
-      const wr = Math.floor(p.warlordSquare / 8);
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let df = -1; df <= 1; df++) {
-          if (dr === 0 && df === 0) continue;
-          const r = wr + dr, f = wf + df;
-          if (r >= 0 && r < 8 && f >= 0 && f < 8) {
-            const t = board[r * 8 + f];
-            if (t && t.slot !== 'K') captures.push(t); // royals are spared by Shatter
-          }
-        }
-      }
-      break;
-    }
     case 'rampage':
-      for (const sq of p.captures) {
-        const t = board[sq];
-        if (t) captures.push(t);
+      slides.set(p.to, p.from);
+      break;
+    case 'march': {
+      const dr = (p.to >> 3) - (p.from >> 3);
+      const df = (p.to & 7) - (p.from & 7);
+      for (const step of computeMarch(stateBefore.board, stateBefore.sideToMove, dr, df) ?? []) {
+        slides.set(step.to, step.from);
       }
       break;
-    case 'strike': {
-      const t = board[p.target];
-      if (t) captures.push(t);
-      break;
     }
-    case 'march':
-      break; // the March never captures
+    case 'shatter':
+    case 'strike':
+      break;
   }
-
-  return captures;
+  if (turn.rally) {
+    const origin = slides.get(turn.rally.from) ?? turn.rally.from;
+    slides.delete(turn.rally.from);
+    slides.set(turn.rally.to, origin);
+  }
+  return { slides, appears, impacts };
 }
 
 // ─── Board square helpers ─────────────────────────────────────────────────────

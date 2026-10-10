@@ -3,11 +3,9 @@ import { test, expect } from '@playwright/test';
 async function startLocalGame(page: import('@playwright/test').Page) {
   await page.goto('/schism-chess/');
   await page.getByRole('button', { name: 'New local game' }).click();
-  await page.getByRole('button', { name: "I'm ready →" }).click();
   await page.getByRole('button', { name: 'The Crown', exact: true }).click();
   await page.getByRole('button', { name: 'Done →' }).click();
   await page.getByRole('button', { name: 'Player 2 is ready →' }).click();
-  await page.getByRole('button', { name: "I'm ready →" }).click();
   await page.getByRole('button', { name: 'The Crown', exact: true }).click();
   await page.getByRole('button', { name: 'Done →' }).click();
   await page.getByTestId('start-game').click();

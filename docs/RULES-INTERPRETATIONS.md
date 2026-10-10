@@ -224,3 +224,35 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 **Interaction:** A Shade's piercing check can therefore no longer be answered by teleport-capturing the Shade — the Veil answers with a king move or a queen-line capture instead. The piercing-check rule text was updated accordingly; RULES.md §Phantom and §Veil cross-reference each other.
 
 **Code:** slot filter in `addWraithMoves` (`src/engine/veil.ts`); threat model untouched (teleport was never part of `attackedSquares`).
+
+---
+
+## v1.3.0 — Audit pass (engine fixes; no rules text change)
+
+### Castling rights lapse however the king or corner rook leaves
+
+**Ruling:** A castling right is lost not only when its king or rook moves or a piece lands on the rook's corner, but whenever that king or rook is no longer on its home square after a turn — including a Wild Stalker's Strike (the striker never lands there) and a Twins Shatter. Without this, a struck rook's right lingered, and a *different* rook later arriving on that corner could castle.
+
+**Code:** `revokeLostCastlingRights` in `src/engine/apply.ts`, applied after every turn (it only ever removes rights). Regression tests in `tests/engine/audit-fixes.test.ts`.
+
+### Exhaustion belongs to the Stalker, not to the square
+
+**Ruling:** An entry in `exhausted` survives a turn only while an **opponent B-slot piece** (the exhausted Stalker) still stands on it. If the Stalker is captured, the mark goes with it; if it steps away, it is cleared as before. Previously a piece capturing the exhausted Stalker inherited the mark — the UI drew it dimmed with ⊗ for as long as it stayed, the repetition key carried a phantom entry, and a Wild Stalker later standing there (e.g. a promoted one) could be wrongly barred from striking.
+
+**Code:** the `newExhausted` filter in `applyTurnUnchecked` now reads the post-turn board.
+
+### Thralls never capture en passant — not even by homing
+
+**Ruling:** RULES.md §Phantom: Thralls take no en passant. A Thrall's **homing** step may land diagonally on the en-passant target square (it is empty and may home toward the king); that is an ordinary move — the enemy pawn that just double-stepped stays on the board. Previously `apply.ts` treated any pawn arriving on the ep square as an en-passant capture.
+
+**Code:** `isEnPassant` in `apply.ts` and `isEnPassantMove` in `notation.ts` check that the mover's army is not Phantom (and that the step is diagonal); the UI's `captureSquares` mirrors it. SAN for that step is the homing form `Pd6`.
+
+### Twins single-check rule sees en passant
+
+**Fix (not a new ruling):** the one-action-per-check filter computes the board after the primary action; it ignored en passant, so capturing a checking pawn *en passant* was wrongly rejected as "primary doesn't resolve the check". `applyStdToBoard` in `src/engine/twins.ts` now removes the passed pawn.
+
+### The game ends when it ends
+
+**Ruling:** Invasion, threefold repetition, and the fifty-move rule end the game automatically (the UI has always treated them so). `replayGame` — and therefore PBM `validatePayload` — now rejects any ply played after such a position, with "The game is over". Before, a loser by invasion (who still has legal moves) could append a move, mark the payload ongoing, and keep playing; checkmate/stalemate were already safe because no legal move exists. `positionalStatus(state)` in `status.ts` is the move-generation-free part of `gameStatus` that the replay checks before each ply.
+
+**Fixture change:** `tests/fixtures/games/threefold.txt` used to continue for three plies past the threefold (reached at 5. Nf3); it now ends there.

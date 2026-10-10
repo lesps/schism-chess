@@ -56,10 +56,15 @@ export function applyShatterToBoard(board: GameState['board'], warlordSq: Square
   return b;
 }
 
-/** Apply a StandardMove (primary) to a board copy. Handles promotion. */
-function applyStdToBoard(board: GameState['board'], mv: StandardMove): GameState['board'] {
+/** Apply a StandardMove (primary) to a board copy. Handles promotion and en passant. */
+function applyStdToBoard(
+  board: GameState['board'], mv: StandardMove, epTarget: Square | null,
+): GameState['board'] {
   const b = board.slice() as GameState['board'];
   const piece = b[mv.from]!;
+  if (piece.slot === 'P' && mv.to === epTarget && (mv.from & 7) !== (mv.to & 7)) {
+    b[piece.color === 'W' ? mv.to - 8 : mv.to + 8] = null;
+  }
   b[mv.to] = mv.promotion ? { slot: mv.promotion, color: piece.color } : piece;
   b[mv.from] = null;
   return b;
@@ -74,8 +79,10 @@ export function applyRallyToBoard(board: GameState['board'], rally: RallyStep): 
 }
 
 /** Compute the board after a primary action. */
-function boardAfterPrimary(board: GameState['board'], primary: Turn['primary']): GameState['board'] {
-  if (primary.type === 'standard') return applyStdToBoard(board, primary as StandardMove);
+function boardAfterPrimary(
+  board: GameState['board'], primary: Turn['primary'], epTarget: Square | null,
+): GameState['board'] {
+  if (primary.type === 'standard') return applyStdToBoard(board, primary as StandardMove, epTarget);
   if (primary.type === 'shatter') return applyShatterToBoard(board, (primary as Shatter).warlordSquare);
   return board.slice() as GameState['board']; // teleport (shouldn't occur for Twins)
 }
@@ -209,7 +216,7 @@ function twinsGenerator(state: GameState): Turn[] {
 
   // Expand each primary into primary-only and primary+rally turns
   for (const t of primaryTurns) {
-    const midBoard = boardAfterPrimary(board, t.primary);
+    const midBoard = boardAfterPrimary(board, t.primary, state.enPassantTarget);
 
     // Single-check rule: after the primary, all Warlords must be out of check
     if (singleCheckBefore) {
