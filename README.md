@@ -44,6 +44,6 @@ Requires Node 20+.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the engine design, registry pattern, SFEN-X format, PBM phase machine, and the Transport network seam.
 
-Game rules: [docs/RULES.md](docs/RULES.md) (canonical, v2.3)  
+Game rules: [docs/RULES.md](docs/RULES.md) (canonical, v2.3.1)  
 Interpretation log: [docs/RULES-INTERPRETATIONS.md](docs/RULES-INTERPRETATIONS.md)  
 PBM protocol: [docs/PBM-PROTOCOL.md](docs/PBM-PROTOCOL.md)

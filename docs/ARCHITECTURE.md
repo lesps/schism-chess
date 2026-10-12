@@ -141,7 +141,7 @@ The UI is a dumb terminal: it renders `GameState` and submits `Turn`s; it never 
 
 **`openGame(gameId)`** routes a stored game by phase: commit → share the challenge (creator) or respond; reveal → re-share our response (respondent), auto-reveal (creator holding the salt), or salt-missing; play/finished → the game (or replay if this device has no meta). Imports, *My games*, Home "Continue", and conflict resolution all go through it.
 
-**Back button.** One history entry stands for "away from home" and one for an open overlay; `popstate` closes the overlay, then returns home. Entries the app pops itself (via `history.back()` when you navigate home or close the rules from the UI) are ignored by the handler.
+**Back button.** One history entry stands for "away from home" and one for an open overlay; `popstate` closes the overlay, then returns home. Entries the app pops itself (via `history.back()` when you navigate home or close the rules from the UI) are ignored by the handler; after a reload the app adopts its own entry (`history.state.schism`) instead of stacking another.
 
 ### `GameScreen` data flow
 

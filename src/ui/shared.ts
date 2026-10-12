@@ -85,41 +85,41 @@ const SLOT_NAMES: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
 // ─── Piece move reminders (shown while a piece is selected) ──────────────────
 
 const STANDARD_PIECE_INFO: Record<Slot, string> = {
-  K: 'Royal. Steps one square in any direction. Cross the midline to win by invasion.',
+  K: 'Royal — steps one square any way. Keep it out of check. Walk it past the dashed midline, not in check, to win by invasion.',
   Q: 'Slides any distance along ranks, files, and diagonals.',
   R: 'Slides any distance along ranks and files.',
   B: 'Slides any distance along diagonals.',
-  N: 'Jumps in an L-shape, over anything in the way.',
-  P: 'Steps forward one; captures one square diagonally forward; promotes on the last rank.',
+  N: 'Jumps in an L-shape (two squares, then one sideways), over anything in the way.',
+  P: 'Steps forward one (two from its starting square) and captures one square diagonally forward, including en passant. On the last rank it promotes to one of your army’s own pieces.',
 };
 
 const ARMY_PIECE_INFO: Partial<Record<Army, Partial<Record<Slot, string>>>> = {
   Crown: {
-    K: 'Royal. Steps one square in any direction; may castle. Cross the midline to win by invasion.',
-    P: 'Forward one (two from start); captures diagonally; en passant; promotes on the last rank.',
+    K: 'Royal — steps one square any way, and may castle. Walk it past the dashed midline, not in check, to win by invasion.',
+    P: 'Steps forward one (two from its starting square) and captures one square diagonally forward, including en passant. On the last rank it promotes — the Crown can always make a new Queen.',
   },
   Phantom: {
-    Q: 'Ghostwalks along Queen lines — drifts through pieces, landing only on empty squares. Never captures. Its check pierces: blocking is impossible; move the King or take the Shade.',
-    P: 'Forward one (no double step); captures diagonally; or homes one step toward the enemy King. Promotes.',
+    Q: 'Ghostwalks along queen lines: passes through any piece, landing only on empty squares. Never captures. Its check pierces — it can’t be blocked: the King must move or the Shade must be taken.',
+    P: 'Steps forward one (never two) and captures diagonally forward — or homes: one step in any direction onto an empty square closer to the enemy King (orange dots). No en passant.',
   },
   Accord: {
-    Q: 'Steps one square, never captures. Knights/Bishops/Rooks in its Banner share their movement (Concord). Can lead a March: the whole formation steps one square together.',
-    R: 'Slides orthogonally. In the Herald’s Banner it also gains the movement of any Bishop or Knight standing there with it.',
-    B: 'Slides diagonally. In the Herald’s Banner it also gains the movement of any Rook or Knight standing there with it.',
-    N: 'Knight jumps. In the Herald’s Banner it also gains the movement of any Rook or Bishop standing there with it.',
+    Q: 'Steps one square and never captures. Not royal — it can be taken. Knights, Bishops and Rooks inside its tinted 3×3 Banner share their moves (Concord), and it can lead a March: the whole Banner steps one square with it.',
+    R: 'Slides along ranks and files. Inside the Herald’s Banner it can also move as any Bishop or Knight standing in the Banner with it.',
+    B: 'Slides along diagonals. Inside the Herald’s Banner it can also move as any Rook or Knight standing in the Banner with it.',
+    N: 'Jumps in an L-shape. Inside the Herald’s Banner it can also move as any Rook or Bishop standing in the Banner with it.',
   },
   Twins: {
-    K: 'Royal. Steps one square; afterwards one Warlord may Rally a free step. Can Shatter everything adjacent (royals are spared). Both Warlords past the midline wins.',
+    K: 'Royal Warlord — steps one square any way. After any move, one Warlord may Rally a free step. Shatter blasts every piece next to it (royals are spared). Both Warlords past the midline wins.',
   },
   Veil: {
-    Q: 'Moves as a Queen or teleports to any empty square. Captures cost 1 Essence; checks need ≥1 — at 0 Essence it is inert.',
-    R: 'Teleports to any empty square. Never captures and threatens nothing.',
+    Q: 'Moves like a Queen or teleports to any empty square. Each capture costs 1 Essence; at 0 Essence it can’t capture or give check. A teleport-capture can’t take a King or a Queen-type piece.',
+    R: 'Teleports to any empty square. Never captures and never gives check — a blocker.',
   },
   Wild: {
-    Q: 'Chancellor: slides like a Rook or jumps like a Knight.',
-    R: 'Up to 3 squares orthogonally; capturing triggers a Rampage that clears the whole path. Enemies must be within 2 squares to capture it.',
-    B: 'Up to 2 squares diagonally. Strikes without moving (target dies, Stalker stays), then cannot capture on your next turn.',
-    N: 'Knight jumps — and may capture friendly pieces too.',
+    Q: 'Moves like a Rook or jumps like a Knight.',
+    R: 'Moves up to 3 squares along a rank or file. A capture starts a Rampage: it charges the full 3 squares, removing every piece in the way — yours too. Armor: an enemy must stand within 2 squares to capture it.',
+    B: 'Moves up to 2 squares diagonally. Captures by Strike: the target vanishes but the Stalker stays where it is — then it can’t capture on your next turn (Exhausted).',
+    N: 'Jumps like a Knight — and may capture your own pieces too (never your King).',
   },
 };
 

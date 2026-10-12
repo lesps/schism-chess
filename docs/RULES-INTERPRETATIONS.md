@@ -88,11 +88,11 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 
 ## S8 — Draws and Game Status
 
-### Threefold repetition — positionKeys counts from game start
+### Threefold repetition — positionKeys counts from game start *(superseded in v2.3.1)*
 
-**Ruling:** Threefold draw fires when the **current** position key appears ≥ 3 times in `state.positionKeys`. The initial position is not pre-populated in `applyTurnUnchecked`; callers who need the initial position counted must seed `positionKeys: [positionKey(initialState(...))]` before play begins.
+> **Superseded (RULES v2.3.1):** the starting position now counts — see "Threefold counted as in standard chess" under v1.3.0 below.
 
-**Code:** `gameStatus` in `src/engine/status.ts` counts occurrences of `positionKey(state)` in `state.positionKeys`.
+**Ruling (old):** Threefold draw fires when the **current** position key appears ≥ 3 times in `state.positionKeys`. The initial position was not pre-populated, so returning to the start needed four occurrences.
 
 ### Insufficient-material draw — stub returns false
 
@@ -227,7 +227,7 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 
 ---
 
-## v1.3.0 — Audit pass (engine fixes; no rules text change)
+## v1.3.0 — Audit pass (engine fixes; rules text changed only for threefold, v2.3.1)
 
 ### Castling rights lapse however the king or corner rook leaves
 
@@ -255,4 +255,12 @@ Judgment calls made during engine implementation, listed by sprint. Each entry n
 
 **Ruling:** Invasion, threefold repetition, and the fifty-move rule end the game automatically (the UI has always treated them so). `replayGame` — and therefore PBM `validatePayload` — now rejects any ply played after such a position, with "The game is over". Before, a loser by invasion (who still has legal moves) could append a move, mark the payload ongoing, and keep playing; checkmate/stalemate were already safe because no legal move exists. `positionalStatus(state)` in `status.ts` is the move-generation-free part of `gameStatus` that the replay checks before each ply.
 
-**Fixture change:** `tests/fixtures/games/threefold.txt` used to continue for three plies past the threefold (reached at 5. Nf3); it now ends there.
+**Fixture change:** `tests/fixtures/games/threefold.txt` used to continue past the threefold; it now ends at the ply that completes it (4… Ng8 since v2.3.1 counts the starting position).
+
+### Threefold counted as in standard chess (RULES v2.3.1)
+
+**Ruling:** Repetition follows FIDE 9.2.3. (1) The starting position is the first occurrence: `initialState` seeds `positionKeys` with its own key, and `parseSfen` seeds the parsed position's key (its earlier history is unknown). `applyTurnUnchecked` still appends after every ply, so `positionKeys` always ends with the current position. (2) Positions are the same if the side to move, the board, the castling rights, and the possible moves match — so the en-passant square is part of the key **only when an en-passant capture is legal** for the side to move (a capturing pawn exists, isn't a Phantom Thrall, isn't pinned, and the capture survives the opponent's check-response rule; for the Twins a Rally may complete a double-check escape). (3) Essence and Stalker exhaustion stay in the key, since they change what pieces can do. The draw is automatic on the third occurrence (online-chess convention, as before) rather than a claim.
+
+**Code:** `positionKey` / `enPassantCapturable` / `epCaptureIsLegal` in `src/engine/positionKey.ts` (a small re-implementation of the legality pipeline for that one move — it can't call `legalTurns`, which applies turns, which compute keys); seeding in `positions.ts` and `sfen.ts`. Tests: `tests/engine/repetition.test.ts`.
+
+**Compatibility:** a saved game or PBM payload that reached the start position three times (or repeated a position whose first occurrence carried an uncapturable en-passant square) now ends at that ply, and any later plies are rejected by `replayGame`. The `threefold.txt` fixture now ends at 4… Ng8.

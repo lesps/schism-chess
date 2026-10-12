@@ -45,6 +45,8 @@ interface Props {
   animation?: BoardAnimation | null;
   /** Keyboard: Escape while the board has focus. */
   onEscape?: () => void;
+  /** Mouse/pen hover over a square (null when leaving the board) — for inspect-on-hover. */
+  onHoverSquare?: (sq: Square | null) => void;
   /** Read-only boards (replay) take no input. */
   interactive?: boolean;
 }
@@ -68,6 +70,7 @@ export function Board({
   onDrop,
   animation,
   onEscape,
+  onHoverSquare,
   interactive = true,
 }: Props) {
   const { board, armies, sideToMove } = gameState;
@@ -210,6 +213,7 @@ export function Board({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onPointerLeave={() => onHoverSquare?.(null)}
       onKeyDown={handleKeyDown}
     >
       {squares.map(sq => {
@@ -276,6 +280,7 @@ export function Board({
             data-rank={rank}
             onClick={() => handleClick(sq)}
             onFocus={() => setFocusSq(sq)}
+            onPointerEnter={e => { if (e.pointerType !== 'touch') onHoverSquare?.(sq); }}
           >
             {showRank && (
               <span className="coord rank" aria-hidden>

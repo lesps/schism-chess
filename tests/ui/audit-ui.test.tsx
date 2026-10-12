@@ -15,15 +15,21 @@ const click = (c: HTMLElement, sq: number) =>
 // ── rebuildGame: resume from the move list, not a SFEN snapshot ──────────────
 
 describe('rebuildGame', () => {
-  it('restores history, captures and the repetition record', () => {
-    const moves = ['e4', 'd5', 'exd5', 'Nf6', 'Nf3', 'Ng8', 'Ng1', 'Nf6', 'Nf3', 'Ng8', 'Ng1'];
-    const { state, history, error } = rebuildGame('Crown', 'Crown', moves);
+  it('restores history and captures', () => {
+    const moves = ['e4', 'd5', 'exd5', 'Nf6'];
+    const { history, error } = rebuildGame('Crown', 'Crown', moves);
     expect(error).toBeUndefined();
     expect(history.map(h => h.san)).toEqual(moves);
     expect(capturedFromHistory(history).B).toEqual([{ slot: 'P', color: 'B' }]);
-    // positionKeys survive (SFEN-X can't carry them): one more knight hop is a threefold draw
-    expect(state.positionKeys).toHaveLength(moves.length);
-    const t = sanToTurn(state, 'Nf6');
+  });
+
+  it('restores the repetition record (SFEN-X cannot carry it), start position included', () => {
+    const moves = ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1'];
+    const { state } = rebuildGame('Crown', 'Crown', moves);
+    expect(state.positionKeys).toHaveLength(moves.length + 1);
+    expect(gameStatus(state)).toEqual({ type: 'ongoing' });
+    // …so the next knight hop back home is the third occurrence of the start position
+    const t = sanToTurn(state, 'Ng8');
     if (isParseError(t)) throw new Error(t.error);
     expect(gameStatus(applyTurn(state, t))).toEqual({ type: 'draw', by: 'threefold' });
   });
@@ -154,5 +160,14 @@ describe('Board keyboard play', () => {
     key('Enter'); // e4
     expect(container.textContent).toContain('Black to move');
     expect(container.querySelector('[data-sq="28"] [data-slot="P"]')).toBeTruthy();
+  });
+});
+
+describe('repetition warning', () => {
+  it('warns when the current position has occurred twice (start position counted)', () => {
+    const { container } = render(
+      <GameScreen armyW="Crown" armyB="Crown" initialMoves={['Nf3', 'Nf6', 'Ng1', 'Ng8']} onHome={() => {}} onNewGame={() => {}} />,
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toMatch(/occurred twice/);
   });
 });

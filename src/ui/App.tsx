@@ -136,10 +136,7 @@ export default function App() {
   // ── Browser back button ──────────────────────────────────────────────────────
   // One history entry stands for "away from home" and one for an open overlay, so
   // Android/browser Back closes the overlay, then returns home, then leaves.
-  // After a reload the current entry may already be ours (history.state survives it).
-  const screenEntryRef = useRef(
-    typeof history !== 'undefined' && (history.state as { schism?: string } | null)?.schism === 'screen',
-  );
+  const screenEntryRef = useRef(false);
   const overlayEntryRef = useRef(false);
   const ignorePopsRef = useRef(0);
 
@@ -170,7 +167,9 @@ export default function App() {
 
   useEffect(() => {
     if (screen.type !== 'home' && !screenEntryRef.current) {
-      pushEntry('screen');
+      // After a reload we may already stand on our own entry (history.state survives
+      // reloads): adopt it rather than stacking another.
+      if ((history.state as { schism?: string } | null)?.schism !== 'screen') pushEntry('screen');
       screenEntryRef.current = true;
     } else if (screen.type === 'home' && screenEntryRef.current && !overlayEntryRef.current) {
       screenEntryRef.current = false;

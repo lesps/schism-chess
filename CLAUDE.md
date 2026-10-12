@@ -19,7 +19,7 @@ src/pbm/       # Pure TS — play-by-post logic (S10: types, codec, game flow, v
 src/ui/        # React components
 src/app/       # App wiring (main.tsx entry point)
 tests/         # Mirrors src/ structure
-docs/          # RULES.md (canonical ruleset, v2.2); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
+docs/          # RULES.md (canonical ruleset, v2.3.1); RULES-INTERPRETATIONS.md (judgment calls); ARCHITECTURE.md; PBM-PROTOCOL.md; checklists/
 ```
 
 ## Engine Purity Rule
@@ -219,9 +219,9 @@ Insufficient-material draw stub returns false (full detection deferred past S8; 
 
 ## positionKeys convention
 
-`applyTurnUnchecked` appends the resulting position's key to `positionKeys`.  
-Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys`.  
-Initial position is not pre-populated; if you need it counted start the game with `positionKeys: [positionKey(state)]`.
+Repetition follows standard chess (FIDE 9.2.3; RULES v2.3.1). `initialState` and `parseSfen` seed `positionKeys` with the starting position's key, and `applyTurnUnchecked` appends the resulting position's key — so `positionKeys` always ends with the current position, and the start counts as occurrence #1.  
+Threefold draw triggers when the current key appears ≥ 3 times in `positionKeys` (automatic, no claim).  
+`positionKey` includes board, side to move, castling rights, Essence, exhaustion — and the en-passant square **only when an en-passant capture is legal** (`enPassantCapturable` in `positionKey.ts`; pinned pawns, Phantom Thralls, and piercing-check vetoes are accounted for). Hand-built `GameState` literals in tests still start with whatever `positionKeys` they specify.
 
 Game end is automatic: once `gameStatus` is terminal no further ply is legal, and `replayGame` rejects any ply played after a positional end (invasion, threefold, fifty-move).
 
@@ -316,6 +316,9 @@ src/ui/
                           computeTurnAnimation)
   strings.ts              All user-facing UI strings (HINTS object)
   gameRecord.ts           rebuildGame(armyW, armyB, sans) → { state, history, error? }; capturedFromHistory
+  pieceGuide.ts           pieceNotes(state, sq, turns?) — live notes (Essence, Concord partners, exhaustion,
+                          promotion options, piercing check, in check); moveLegend(state, turns) — names for
+                          the board markers a piece's turns produce; armyRoster(army)
   prefs.ts                Per-device prefs (autoRotate, sound) in localStorage, storage-failure safe
   sound.ts                playSound(kind) — synthesized WebAudio + navigator.vibrate; silent without AudioContext
   App.tsx                 Screen router; rules + share overlays above a still-mounted screen; #g=/#rules
@@ -336,7 +339,9 @@ src/ui/
     SanInput.tsx           SAN text input; sanToTurn; inline parse-error; aria labels
     TurnChooser.tsx        Bottom-sheet disambiguation for promotion / Shatter / March / rally variants
     GameEndModal.tsx       Win / draw modal: Rematch + New game (local), Review, Undo, close to view board
-    ArmyInfoSheet.tsx      Army identities + rules links + settings toggles (auto-rotate, sound)
+    PieceInfoPanel.tsx     Tapped/hovered piece: name, plain-language summary (getPieceInfo), live notes,
+                           marker legend; hosts the Twins' Shatter button
+    ArmyInfoSheet.tsx      Per-army piece roster (icon + what it does) + identities + rules links + settings
     useSheetKeys.ts        Escape closes the topmost sheet
   hooks/
     useGameLogic.ts        Core state hook: { state, history } (atomic), legalTurns, applyTurn, undo,
@@ -344,6 +349,8 @@ src/ui/
 ```
 
 ### Game input
+
+Tapping any piece (either side, with or without moves) opens `PieceInfoPanel`; on desktop, hovering a piece with the mouse shows the same panel (dimmed, no legend) until the pointer leaves the board.
 
 Tap a piece, then a destination — or drag it (pointer events on the board; a drag starts after 6px, `touch-action: none`; the click that follows a drop is swallowed). Keyboard: arrows move a roving focus in screen directions, Enter/Space taps, Esc cancels; F flips; Ctrl/⌘+Z undoes (hotseat). `tryMove(from, dest)` groups the legal turns for the pair by distinct primary action: one → commit (Rampage/March go through their preview; a Twins primary with rally variants enters rally staging); several (promotion pieces, Herald step vs March) → `TurnChooser`, whose pick is routed the same way. So a Twins pawn promotion asks for the piece first, then offers the Rally.
 

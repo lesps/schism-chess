@@ -224,24 +224,19 @@ describe('checkmate', () => {
 // Draws
 // ---------------------------------------------------------------------------
 describe('draws', () => {
-  it('threefold repetition via positionKey history', () => {
-    // Inject a state where the current position key is already in positionKeys twice
-    // Then play a null-cycle move to make it appear a third time
-    const base = initialState('Crown', 'Crown');
-    // Oscillate knights: Ng1-f3, Nf3-g1
-    let state = base;
-    for (let i = 0; i < 2; i++) {
+  it('threefold repetition via positionKey history (the start position counts)', () => {
+    // Oscillate knights: Ng1-f3, Nf3-g1. The start position is occurrence #1,
+    // so returning to it twice makes three.
+    let state = initialState('Crown', 'Crown');
+    const cycle = () => {
       state = applyTurn(state, mv('g1', 'f3'));
       state = applyTurn(state, mv('g8', 'f6'));
       state = applyTurn(state, mv('f3', 'g1'));
       state = applyTurn(state, mv('f6', 'g8'));
-    }
-    // Position returned to initial 2 times, positionKeys has it twice
-    // Now make one more round to trigger the third
-    state = applyTurn(state, mv('g1', 'f3'));
-    state = applyTurn(state, mv('g8', 'f6'));
-    state = applyTurn(state, mv('f3', 'g1'));
-    state = applyTurn(state, mv('f6', 'g8'));
+    };
+    cycle();
+    expect(gameStatus(state).type).toBe('ongoing'); // twice
+    cycle();
     const status = gameStatus(state);
     expect(status.type).toBe('draw');
     if (status.type === 'draw') expect(status.by).toBe('threefold');

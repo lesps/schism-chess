@@ -5,7 +5,12 @@ import {
   ARMY_NAMES,
   ARMY_RULE_ANCHORS,
   ARMY_TAGLINES,
+  PIECE_COLORS,
+  getPieceInfo,
+  getSlotName,
 } from '../shared';
+import { armyRoster } from '../pieceGuide';
+import { PieceIcon } from '../pieceArt';
 import { useSheetKeys } from './useSheetKeys';
 
 export interface SheetToggle {
@@ -38,10 +43,10 @@ export function ArmyInfoSheet({ armies, onRules, onClose, toggles }: Props) {
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal
-        aria-label="Armies in this game"
+        aria-label="Armies and pieces in this game"
       >
         <div className="sheet-grip" aria-hidden />
-        <div className="chooser-title">Armies in this game</div>
+        <div className="chooser-title">Armies &amp; pieces in this game</div>
         <div className="army-info-list">
           {colors.map(color => {
             const army = armies[color];
@@ -55,7 +60,23 @@ export function ArmyInfoSheet({ armies, onRules, onClose, toggles }: Props) {
                   <span className="army-info-side">{color === 'W' ? 'White' : 'Black'}</span>
                 </div>
                 <div className="army-info-tagline">{ARMY_TAGLINES[army]}</div>
-                <p className="army-info-identity">{ARMY_IDENTITIES[army]}</p>
+                <ul className="army-roster" data-testid={`army-roster-${color}`}>
+                  {armyRoster(army).map(slot => (
+                    <li key={slot} className="army-roster-row">
+                      <span className="army-roster-icon" style={{ color: PIECE_COLORS[army][color] }} aria-hidden>
+                        <PieceIcon slot={slot} color={color} army={army} />
+                      </span>
+                      <span className="army-roster-text">
+                        <strong>{getSlotName(slot, army)}</strong>
+                        <span>{getPieceInfo(slot, army)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <details className="army-info-more">
+                  <summary>How this army plays</summary>
+                  <p className="army-info-identity">{ARMY_IDENTITIES[army]}</p>
+                </details>
                 {onRules && (
                   <button
                     className="army-info-rules-link"

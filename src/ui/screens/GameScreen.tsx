@@ -20,17 +20,15 @@ import { useGameLogic, turnsForMove } from '../hooks/useGameLogic';
 import {
   ARMY_ACCENTS,
   ARMY_NAMES,
-  PIECE_COLORS,
   armorZone,
   computeTurnAnimation,
-  getPieceInfo,
   getPrimaryFrom,
-  getSlotName,
   hasCrossedMidline,
   primaryEq,
   squareNeighbors,
 } from '../shared';
-import { PieceIcon } from '../pieceArt';
+import { PieceInfoPanel } from '../components/PieceInfoPanel';
+import { moveLegend, pieceNotes } from '../pieceGuide';
 import { HINTS } from '../strings';
 import { loadPrefs, savePref } from '../prefs';
 import type { Prefs } from '../prefs';
@@ -262,6 +260,13 @@ export function GameScreen({
     return { key: history.length, ...computeTurnAnimation(lastEntry.stateBefore, lastEntry.turn) };
   }, [lastEntry, history.length]);
 
+  // Occurrences of the current position (positionKeys always ends with it)
+  const repetitions = useMemo(() => {
+    const keys = gameState.positionKeys;
+    const current = keys[keys.length - 1];
+    return keys.filter(k => k === current).length;
+  }, [gameState.positionKeys]);
+
   // ── Hint message ──
   const hint = useMemo((): string | null => {
     if (twinsStagingTurns !== null || status.type !== 'ongoing') return null;
@@ -275,12 +280,25 @@ export function GameScreen({
       const piece = gameState.board[selectedSquare];
       if (piece?.slot === 'B' && armies[piece.color] === 'Wild') return HINTS.STALKER_EXHAUSTED;
     }
+    if (repetitions === 2) return HINTS.REPETITION;
     if (history.length === 0 && selectedSquare === null && canAct) return HINTS.FIRST_MOVE;
     return null;
-  }, [twinsStagingTurns, status.type, inCheck, canAct, movingArmy, checkedSquares, opponentArmy, gameState, selectedSquare, exhaustedSquares, armies, history.length]);
+  }, [twinsStagingTurns, status.type, inCheck, canAct, movingArmy, checkedSquares, opponentArmy, gameState, selectedSquare, exhaustedSquares, armies, history.length, repetitions]);
 
-  // ── Selected-piece reminder ──
-  const selectedPiece = selectedSquare !== null ? gameState.board[selectedSquare] : null;
+  // ── Piece info: the selected piece, or (desktop) the piece under the mouse ──
+  const [hoverSquare, setHoverSquare] = useState<Square | null>(null);
+  const infoSquare = selectedSquare ?? (hoverSquare !== null && gameState.board[hoverSquare] ? hoverSquare : null);
+  const infoIsHover = selectedSquare === null && infoSquare !== null;
+  const infoPiece = infoSquare !== null ? gameState.board[infoSquare] : null;
+  const infoTurns = useMemo(
+    () => (infoSquare === null || !canAct ? [] : allLegal.filter(t => getPrimaryFrom(t) === infoSquare)),
+    [infoSquare, canAct, allLegal],
+  );
+  const infoNotes = useMemo(
+    () => (infoSquare === null ? [] : pieceNotes(gameState, infoSquare, infoTurns)),
+    [gameState, infoSquare, infoTurns],
+  );
+  const infoLegend = useMemo(() => moveLegend(gameState, infoTurns), [gameState, infoTurns]);
 
   // ── Shatter legality for selected Warlord ──
   const shatterLegalForSelected = useMemo((): boolean => {
@@ -560,6 +578,7 @@ export function GameScreen({
               empoweredSquares={empoweredSquares}
               exhaustedSquares={exhaustedSquares}
               invasionSquares={invasionSquares}
+              onHoverSquare={setHoverSquare}
               onDragStart={handleDragStart}
               onDrop={handleDrop}
               animation={isStaging ? null : animation}
@@ -618,45 +637,31 @@ export function GameScreen({
             </div>
           )}
 
-          {/* Selected-piece reminder (shown for any tapped piece, even without moves) */}
-          {selectedPiece && twinsStagingTurns === null && (() => {
-            const pArmy = armies[selectedPiece.color];
-            const note = gameOver ? null
-              : selectedPiece.color !== sideToMove || !canAct
-                ? HINTS.INSPECT_WAITING
-                : (legalMovesForSelected.length === 0 ? HINTS.NO_LEGAL_MOVES : null);
-            return (
-              <div className="piece-info-bar" data-testid="piece-info">
-                <span
-                  className="piece-info-icon"
-                  style={{ color: PIECE_COLORS[pArmy][selectedPiece.color] }}
-                  aria-hidden
+          {/* What the tapped (or hovered) piece does — shown for any piece, even
+              without moves, with live notes and a legend for its board markers */}
+          {infoSquare !== null && infoPiece && twinsStagingTurns === null && (
+            <PieceInfoPanel
+              piece={infoPiece}
+              army={armies[infoPiece.color]}
+              hover={infoIsHover}
+              status={infoIsHover || gameOver ? null
+                : infoPiece.color !== sideToMove || !canAct
+                  ? HINTS.INSPECT_WAITING
+                  : (legalMovesForSelected.length === 0 ? HINTS.NO_LEGAL_MOVES : null)}
+              notes={infoNotes}
+              legend={infoIsHover ? undefined : infoLegend}
+              action={!infoIsHover && shatterLegalForSelected && shatterPreviewSq === null ? (
+                <button
+                  className="btn shatter-btn"
+                  onClick={() => setShatterPreviewSq(selectedSquare!)}
+                  title={HINTS.TWINS_SHATTER_DESC}
+                  data-testid="shatter-mode-btn"
                 >
-                  <PieceIcon slot={selectedPiece.slot} color={selectedPiece.color} army={pArmy} />
-                </span>
-                <span className="piece-info-text">
-                  <strong className="piece-info-name" style={{ color: ARMY_ACCENTS[pArmy] }}>
-                    {getSlotName(selectedPiece.slot, pArmy)}
-                    {note && <span className="piece-info-note"> · {note}</span>}
-                  </strong>
-                  <span className="piece-info-desc">
-                    {getPieceInfo(selectedPiece.slot, pArmy)}
-                  </span>
-                </span>
-                {/* Shatter (Warlord selected and Shatter legal) */}
-                {shatterLegalForSelected && shatterPreviewSq === null && (
-                  <button
-                    className="btn shatter-btn"
-                    onClick={() => setShatterPreviewSq(selectedSquare!)}
-                    title={HINTS.TWINS_SHATTER_DESC}
-                    data-testid="shatter-mode-btn"
-                  >
-                    💥 {HINTS.SHATTER}
-                  </button>
-                )}
-              </div>
-            );
-          })()}
+                  💥 {HINTS.SHATTER}
+                </button>
+              ) : null}
+            />
+          )}
         </div>
 
         {/* Chrome */}

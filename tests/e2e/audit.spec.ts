@@ -188,3 +188,18 @@ test('re-opening your own response link shows it again instead of "commitment lo
   await page.goto(`${BASE}#g=${encodePayload(challenge)}`);
   await expect(page.getByRole('heading', { name: 'Send your response' })).toBeVisible({ timeout: 8000 });
 });
+
+test('threefold counts the starting position, as in standard chess', async ({ page }) => {
+  await startCrownGame(page);
+  const shuffle = async () => {
+    await move(page, 6, 21);   // Ng1-f3
+    await move(page, 62, 45);  // Ng8-f6
+    await move(page, 21, 6);   // Nf3-g1
+    await move(page, 45, 62);  // Nf6-g8
+  };
+  await shuffle();
+  await expect(page.getByRole('status')).toContainText('occurred twice');
+  await shuffle();
+  await expect(page.getByRole('heading', { name: 'Draw' })).toBeVisible();
+  await expect(page.getByText('Position repeated three times.')).toBeVisible();
+});

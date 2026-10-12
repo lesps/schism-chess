@@ -26,6 +26,9 @@ Execute this checklist on a real phone against the deployed app before tagging.
 - [ ] Tap ↶ — confirm the last move is taken back; refresh — confirm it stays taken back
 - [ ] Open the rules (?) mid-game and come back — confirm the position and move list are unchanged
 - [ ] Confirm sounds/vibration on move, capture, and check; toggle them off in ⓘ
+- [ ] Tap a piece of each type — confirm the panel explains it in plain words, shows live notes (e.g. Wraith Essence, Concord partners), and names each kind of marker on the board
+- [ ] Desktop: hover pieces — confirm the panel follows the mouse; ⓘ shows every piece of both armies
+- [ ] Shuffle knights back to the start twice — confirm the "occurred twice" warning, then the threefold draw
 - [ ] Make a move by typing SAN in the input (e.g. `e4`) — confirm it plays
 - [ ] Type an invalid SAN (e.g. `Nf9`) — confirm inline error appears
 - [ ] Undo the SAN error by clearing and retyping

@@ -34,8 +34,20 @@ describe('positionKey', () => {
     expect(positionKey(base)).not.toBe(positionKey(altered));
   });
 
-  it('differing enPassantTarget → different key', () => {
+  it('an en-passant square nobody can capture on → same key (FIDE 9.2.3)', () => {
     const base = initialState('Crown', 'Crown');
+    const altered: GameState = { ...base, enPassantTarget: algebraicToSquare('e3') };
+    expect(positionKey(base)).toBe(positionKey(altered));
+  });
+
+  it('a capturable en-passant square → different key', () => {
+    // Black pawn d4 can take e3 en passant after White's e2-e4
+    const board = [...initialState('Crown', 'Crown').board];
+    board[algebraicToSquare('e2')] = null;
+    board[algebraicToSquare('e4')] = { slot: 'P', color: 'W' };
+    board[algebraicToSquare('d7')] = null;
+    board[algebraicToSquare('d4')] = { slot: 'P', color: 'B' };
+    const base: GameState = { ...initialState('Crown', 'Crown'), board, sideToMove: 'B' };
     const altered: GameState = { ...base, enPassantTarget: algebraicToSquare('e3') };
     expect(positionKey(base)).not.toBe(positionKey(altered));
   });

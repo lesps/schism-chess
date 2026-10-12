@@ -2,9 +2,18 @@
 
 ## 1.3.0 — 2026-10-10
 
-**v1.3.0 — Audit & UX pass** (rules text unchanged: v2.3)
+**v1.3.0 — Audit & UX pass** (rules v2.3.1: threefold counted as in standard chess; otherwise unchanged)
 
 A full audit of the engine, PBM flow, and UI. Every fix below has a regression test (`tests/engine/audit-fixes.test.ts`, `tests/ui/audit-ui.test.tsx`, `tests/e2e/audit.spec.ts`, plus additions to the PBM and Phantom suites).
+
+### Rules v2.3.1 — threefold repetition as in standard chess
+- The **starting position counts** as the first occurrence (it didn't, so returning to the start took four occurrences), and a double pawn step only makes a "new" position when an **en-passant capture is actually legal** (FIDE 9.2.3 — pinned pawns and Phantom Thralls don't count). Castling rights, Essence, and Exhaustion still distinguish positions; the draw stays automatic. `initialState`/`parseSfen` seed `positionKeys`; `positionKey` decides the en-passant token. Saved games or links that already reached a threefold under the new counting end at that ply.
+- The game now warns when the current position has occurred twice.
+
+### Reading the pieces while you play
+- Tapping a piece opens a larger **piece panel**: its name and side, a plain-language summary (every description rewritten), **live notes** for this position — the Wraith's Essence and whether it can bite, which moves an Accord piece borrows in Concord (or that it's alone / the Herald is dead), how many pieces the Herald leads and whether it can March, an Exhausted Stalker, a Shade giving piercing check, a royal in check, and what an advanced pawn can promote into (your army's own pieces, open slots only, or "Blocked") — plus a **legend** naming every marker that piece puts on the board (Move, Capture, Teleport, Homing step, Rampage, Strike, March, Takes your own piece…).
+- **Hover to inspect** on desktop: point at any piece to read its panel without selecting it.
+- The ⓘ sheet now opens on a **roster of every piece in both armies** with its icon and what it does; the army's strategy blurb sits under "How this army plays".
 
 ### Engine fixes
 - **Castling rights lapse however the rook goes.** A Stalker Strike or a Shatter removing a corner rook left its castling right in place, so a different rook later reaching that corner could castle. Rights are now re-checked against the board after every turn.
@@ -93,6 +102,15 @@ All six armies reviewed with one instruction: err toward fun. Two changed.
 ## 1.0.1 — 2026-07-06
 
 **v1.0.1 — Rules-fidelity bug fixes (rules v2.1.1)**
+
+### Rules v2.3.1 — threefold repetition as in standard chess
+- The **starting position counts** as the first occurrence (it didn't, so returning to the start took four occurrences), and a double pawn step only makes a "new" position when an **en-passant capture is actually legal** (FIDE 9.2.3 — pinned pawns and Phantom Thralls don't count). Castling rights, Essence, and Exhaustion still distinguish positions; the draw stays automatic. `initialState`/`parseSfen` seed `positionKeys`; `positionKey` decides the en-passant token. Saved games or links that already reached a threefold under the new counting end at that ply.
+- The game now warns when the current position has occurred twice.
+
+### Reading the pieces while you play
+- Tapping a piece opens a larger **piece panel**: its name and side, a plain-language summary (every description rewritten), **live notes** for this position — the Wraith's Essence and whether it can bite, which moves an Accord piece borrows in Concord (or that it's alone / the Herald is dead), how many pieces the Herald leads and whether it can March, an Exhausted Stalker, a Shade giving piercing check, a royal in check, and what an advanced pawn can promote into (your army's own pieces, open slots only, or "Blocked") — plus a **legend** naming every marker that piece puts on the board (Move, Capture, Teleport, Homing step, Rampage, Strike, March, Takes your own piece…).
+- **Hover to inspect** on desktop: point at any piece to read its panel without selecting it.
+- The ⓘ sheet now opens on a **roster of every piece in both armies** with its icon and what it does; the army's strategy blurb sits under "How this army plays".
 
 ### Engine fixes
 - **Phantom Thrall homing tightened** (the reported bug): bare Chebyshev reduction let Thralls sidestep to both forward diagonals when the enemy king was straight ahead, step diagonally *backward* when the king was due east/west, and (vs Twins' spread Warlords) qualify in all four diagonal directions. A homing step now must move genuinely toward a king: Chebyshev distance strictly decreases **and** neither the rank nor file distance increases (`stepHomesTowardKing` in `src/engine/phantom.ts`). `THRALL_HOMING_TWINS = 'either'` semantics unchanged.
