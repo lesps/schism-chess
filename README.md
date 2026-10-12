@@ -19,8 +19,10 @@ A two-player asymmetric chess variant on a standard 8×8 board. Each player secr
 
 ## Modes
 
-- **Local hotseat** — pass the device between moves; army choice is hidden during pick.
-- **Play by mail** — share a URL after each move; army commitment is cryptographically hashed so neither player reveals until both are locked in.
+- **Local hotseat** — pass the device between moves; army choice is hidden during pick. Tap or drag pieces, undo, rematch; the board can rotate to face the player to move.
+- **Play by mail** — share a URL after each move; army commitment is cryptographically hashed so neither player reveals until both are locked in. Opening a link takes you straight to the game.
+
+Works on phones (board-first layout, touch drag, haptics) and desktops (board + sidebar, drag with the mouse, keyboard play: arrows/Enter on the board, `F` flip, `Ctrl/⌘+Z` undo, or type moves in algebraic notation).
 
 ---
 
@@ -42,6 +44,6 @@ Requires Node 20+.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the engine design, registry pattern, SFEN-X format, PBM phase machine, and the Transport network seam.
 
-Game rules: [docs/RULES.md](docs/RULES.md) (canonical, v2.0.1)  
+Game rules: [docs/RULES.md](docs/RULES.md) (canonical, v2.3.1)  
 Interpretation log: [docs/RULES-INTERPRETATIONS.md](docs/RULES-INTERPRETATIONS.md)  
 PBM protocol: [docs/PBM-PROTOCOL.md](docs/PBM-PROTOCOL.md)

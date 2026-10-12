@@ -122,43 +122,53 @@ The UI is a dumb terminal: it renders `GameState` and submits `Turn`s; it never 
 
 ### Screen router
 
-`App.tsx` is a single-component router driven by a `Screen` discriminated union. Navigation is imperative (`setScreen(…)`), not URL-based (except for `#g=` PBM links and `#rules` deep-links). Screens:
+`App.tsx` is a single-component router driven by a `Screen` discriminated union. Navigation is imperative (`setScreen(…)`), not URL-based (except for `#g=` PBM links and `#rules` deep-links, both consumed from the address bar once handled). Screens:
 
 | Screen type | Component |
 |-------------|-----------|
-| `home` | `HomeScreen` |
+| `home` | `HomeScreen` (with a "Continue" card for the latest unfinished game) |
 | `new-game` | `NewGameScreen` |
-| `game` | `GameScreen` |
-| `pbm-game` | `GameScreen` with `myColor` prop |
+| `game` | `GameScreen` — hotseat, or PBM when `myColor` is set |
 | `games-list` | `GamesListScreen` |
 | `pbm-create` | `PBMCreateScreen` |
 | `pbm-respond` | `PBMRespondScreen` |
-| `import` | `ImportScreen` |
-| `replay` | `ReplayScreen` |
-| `rules` | `RulesScreen` |
+| `import` | `ImportScreen` (manual paste; links auto-import) |
+| `loading` | spinner while a link validates |
+| `replay` | `ReplayScreen` (also the spectator view of a game with no local meta) |
 | `share`, `conflict`, `salt-missing`, `import-error` | Utility screens |
+
+**Overlays** render above a still-mounted screen (which is marked `inert` + `aria-hidden` meanwhile): the rules (`RulesScreen`) and the PBM share sheet. Unmounting the screen would throw away its state — that was the v1.2 "rules resets the board" bug.
+
+**`openGame(gameId)`** routes a stored game by phase: commit → share the challenge (creator) or respond; reveal → re-share our response (respondent), auto-reveal (creator holding the salt), or salt-missing; play/finished → the game (or replay if this device has no meta). Imports, *My games*, Home "Continue", and conflict resolution all go through it.
+
+**Back button.** One history entry stands for "away from home" and one for an open overlay; `popstate` closes the overlay, then returns home. Entries the app pops itself (via `history.back()` when you navigate home or close the rules from the UI) are ignored by the handler; after a reload the app adopts its own entry (`history.state.schism`) instead of stacking another.
 
 ### `GameScreen` data flow
 
 ```
-useGameLogic (hook)
-  ├─ legalTurns(state)
-  ├─ applyTurn(state, turn) → new state
-  ├─ captured-piece history
-  └─ checkedSquares via getThreatModel
+useGameLogic (hook)          ← initialMoves (SAN list) via rebuildGame, or DEV initialSfen
+  ├─ { state, history }      one atomic state; history entries carry stateBefore + captures
+  ├─ legalTurns / gameStatus / checkedSquares
+  ├─ submitTurn(turn) → applyTurn
+  └─ undo()
 
 GameScreen (component)
-  ├─ Board (render + click)
-  ├─ SanInput (keyboard play via sanToTurn)
-  ├─ CapturedPieceTray
-  ├─ EssenceMeter (Veil only)
-  ├─ MoveListPanel (aria-live log)
-  └─ GameEndModal
+  ├─ Board (tap, drag, keyboard; slide/appear/capture animation from computeTurnAnimation)
+  ├─ context strip: waiting banner / game-over banner / HintBar / rally bar / piece info (+ Shatter)
+  ├─ CapturedPieceTray, EssenceMeter (Veil only), MoveListPanel (aria-live log), SanInput
+  ├─ sheets: TurnChooser, Shatter/Rampage/March previews, ArmyInfoSheet (+ settings)
+  └─ GameEndModal (Rematch / New game / Review / Undo / close to view the board)
 ```
+
+Turn routing: `tryMove(from, dest)` collapses the legal turns for the pair to distinct primary actions — one is committed (Rampage and March via their previews; a Twins primary with rally variants enters rally staging on the board), several open the chooser, and the chooser's pick is routed the same way.
 
 ### Chooser pattern
 
-When `(from, dest)` maps to multiple legal `Turn`s (promotions, Twins rally variants), `GameScreen` sets `chooserTurns` state. `TurnChooser` renders a bottom sheet; selecting calls `submitTurn(turn)` and clears it.
+When `(from, dest)` maps to several distinct primary actions (promotion pieces, Herald step vs March), `GameScreen` sets `chooserTurns`. `TurnChooser` renders a bottom sheet (Esc / backdrop cancels).
+
+### Layout
+
+Portrait: header → board → context strip → chrome; nothing above the board changes height. At aspect ≥ 6:5 and width ≥ 560px the board is on the left and the context strip + chrome form a sidebar. `--board-size` is computed from the viewport; glyphs size in container-query units on `.board-wrapper`.
 
 ---
 
@@ -177,7 +187,7 @@ interface Transport {
 
 Currently implemented as `LocalStorageTransport`. A future cloud backend replaces this singleton — all persistence goes through the `Transport` interface, so no other code changes are needed. See [PBM-PROTOCOL.md §Network](PBM-PROTOCOL.md) for the planned server-as-mailbox design.
 
-localStorage keys: `schism-game-{id}` (payload), `schism-meta-{id}` (metadata).
+localStorage keys: `schism-game-{id}` (payload), `schism-meta-{id}` (metadata: `myColor`, `isLocal?`, `commit?` until the reveal, `updatedAt?`), `schism-pref-{autoRotate|sound}` (device preferences). `persistGame` saves a payload and stamps `updatedAt`; the tab's current game id is `sessionStorage.lastGameId`, used to resume after a refresh.
 
 ---
 

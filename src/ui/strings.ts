@@ -4,7 +4,9 @@
 // phrases "Piercing check" and "Exhausted" — keep those words.
 
 export const HINTS = {
-  FIRST_MOVE: 'Tap any piece to see what it does and where it can move.',
+  FIRST_MOVE: 'Tap or drag a piece to move it. Tap any piece to see what it does.',
+  CHECK: 'Check! Your King must get out of danger this turn.',
+  REPETITION: 'This position has now occurred twice — if it occurs a third time, the game is drawn.',
   NO_LEGAL_MOVES: 'No legal moves right now.',
   INSPECT_WAITING: "It isn't this piece's turn.",
   TWINS_WARLORD_IN_CHECK: 'Warlord in check — your main move alone must escape it. Rally cannot save a lone checked Warlord.',

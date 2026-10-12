@@ -6,17 +6,13 @@ import { test, expect } from '@playwright/test';
 async function startNewGame(page: import('@playwright/test').Page, armyW = 'The Crown', armyB = 'The Crown') {
   await page.getByRole('button', { name: 'New local game' }).click();
 
-  // P1 privacy
-  await page.getByRole('button', { name: "I'm ready →" }).click();
   // P1 picks army (exact: the "Rules for <army>" button shares the substring)
   await page.getByRole('button', { name: armyW, exact: true }).click();
   await page.getByRole('button', { name: 'Done →' }).click();
 
-  // Handover
+  // Handover (doubles as Player 2's privacy screen)
   await page.getByRole('button', { name: 'Player 2 is ready →' }).click();
 
-  // P2 privacy
-  await page.getByRole('button', { name: "I'm ready →" }).click();
   // P2 picks army
   await page.getByRole('button', { name: armyB, exact: true }).click();
   await page.getByRole('button', { name: 'Done →' }).click();
@@ -80,14 +76,13 @@ test.describe('Crown vs Crown hotseat — full game', () => {
 
   test('army picker shows all six armies', async ({ page }) => {
     await page.getByRole('button', { name: 'New local game' }).click();
-    await page.getByRole('button', { name: "I'm ready →" }).click();
 
     for (const army of ['The Crown', 'The Phantom', 'The Accord', 'The Twins', 'The Veil', 'The Wild']) {
       await expect(page.getByRole('button', { name: army, exact: true })).toBeVisible();
     }
   });
 
-  test('back from privacy screen returns to home', async ({ page }) => {
+  test('back from the army picker returns to home', async ({ page }) => {
     await page.getByRole('button', { name: 'New local game' }).click();
     await page.getByRole('button', { name: '← Back' }).click();
     await expect(page.getByText('Schism Chess')).toBeVisible();

@@ -1,7 +1,8 @@
 import type { GameState, Square } from '../../engine/types';
-import { PIECE_COLORS, squareNeighbors } from '../shared';
+import { PIECE_COLORS, getSlotName, squareNeighbors } from '../shared';
 import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
+import { useSheetKeys } from './useSheetKeys';
 
 interface Props {
   warlordSquare: Square;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function ShatterPreview({ warlordSquare, gameState, onConfirm, onCancel }: Props) {
+  useSheetKeys(onCancel);
   const { board, armies, sideToMove } = gameState;
   const neighbors = squareNeighbors(warlordSquare);
   const doomed = neighbors
@@ -23,7 +25,8 @@ export function ShatterPreview({ warlordSquare, gameState, onConfirm, onCancel }
 
   return (
     <div className="preview-overlay" onClick={onCancel} data-testid="shatter-preview">
-      <div className="preview-sheet" onClick={(e: { stopPropagation(): void }) => e.stopPropagation()}>
+      <div className="preview-sheet" role="dialog" aria-modal aria-label={HINTS.SHATTER_CONFIRM_TITLE} onClick={(e: { stopPropagation(): void }) => e.stopPropagation()}>
+        <div className="sheet-grip" aria-hidden />
         <div className="preview-title">{HINTS.SHATTER_CONFIRM_TITLE}</div>
         <div className="preview-desc">{HINTS.TWINS_SHATTER_DESC}</div>
 
@@ -46,7 +49,7 @@ export function ShatterPreview({ warlordSquare, gameState, onConfirm, onCancel }
                   <span className="preview-glyph" style={{ color }} aria-hidden>{glyph}</span>
                   <span className="preview-coord">{coordOf(sq)}</span>
                   <span className="preview-piece-name">
-                    {piece!.color === 'W' ? 'White' : 'Black'} {army} {piece!.slot}
+                    {piece!.color === 'W' ? 'White' : 'Black'} {getSlotName(piece!.slot, army)}
                   </span>
                   {isFriendly && <span className="preview-warning">friendly</span>}
                 </li>

@@ -34,7 +34,8 @@ function assertPhase(payload: PBMPayload, expected: Phase): void {
 /**
  * Create a new game as `color` with `army`. Returns a commit-phase payload.
  * The creator commits to their army via SHA-256(army:salt); the salt must be
- * stored locally until revealArmy() is called.
+ * stored locally until revealArmy() is called. `opponentLabel` is only a
+ * suggestion — the respondent's own label replaces it in respondToCommit().
  */
 export async function createGame(
   creatorLabel: string,
@@ -42,14 +43,15 @@ export async function createGame(
   army: Army,
   salt: string,
   hasher: Hasher,
+  opponentLabel = '',
 ): Promise<PBMPayload> {
   const hash = await hasher.sha256(`${army}:${salt}`);
   return {
     v: 1,
     gameId: generateId(),
     phase: 'commit',
-    white: { label: color === 'W' ? creatorLabel : '' },
-    black: { label: color === 'B' ? creatorLabel : '' },
+    white: { label: color === 'W' ? creatorLabel : opponentLabel },
+    black: { label: color === 'B' ? creatorLabel : opponentLabel },
     commit: { by: color, hash },
     armies: {},
     reveal: undefined,

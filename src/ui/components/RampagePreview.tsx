@@ -1,7 +1,8 @@
 import type { GameState, RampageMove, Turn } from '../../engine/types';
-import { PIECE_COLORS } from '../shared';
+import { PIECE_COLORS, getSlotName } from '../shared';
 import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
+import { useSheetKeys } from './useSheetKeys';
 
 interface Props {
   turn: Turn & { primary: RampageMove };
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function RampagePreview({ turn, gameState, onConfirm, onCancel }: Props) {
+  useSheetKeys(onCancel);
   const { board, armies, sideToMove } = gameState;
   const { from, to, captures } = turn.primary;
 
@@ -20,7 +22,8 @@ export function RampagePreview({ turn, gameState, onConfirm, onCancel }: Props) 
 
   return (
     <div className="preview-overlay" onClick={onCancel} data-testid="rampage-preview">
-      <div className="preview-sheet" onClick={(e: { stopPropagation(): void }) => e.stopPropagation()}>
+      <div className="preview-sheet" role="dialog" aria-modal aria-label={HINTS.RAMPAGE_CONFIRM_TITLE} onClick={(e: { stopPropagation(): void }) => e.stopPropagation()}>
+        <div className="sheet-grip" aria-hidden />
         <div className="preview-title">{HINTS.RAMPAGE_CONFIRM_TITLE}</div>
         <div className="preview-desc">
           {coordOf(from)} → {coordOf(to)} — {HINTS.RAMPAGE_DESC}
@@ -44,7 +47,7 @@ export function RampagePreview({ turn, gameState, onConfirm, onCancel }: Props) 
                 <span className="preview-glyph" style={{ color }} aria-hidden>{glyph}</span>
                 <span className="preview-coord">{coordOf(sq)}</span>
                 <span className="preview-piece-name">
-                  {piece.color === 'W' ? 'White' : 'Black'} {army} {piece.slot}
+                  {piece.color === 'W' ? 'White' : 'Black'} {getSlotName(piece.slot, army)}
                 </span>
                 {isFriendly && <span className="preview-warning">friendly</span>}
               </li>

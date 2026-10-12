@@ -9,6 +9,32 @@ export type GameStatus =
   | { type: 'draw'; by: 'threefold' | 'fifty-move' | 'material' };
 
 export function gameStatus(state: GameState): GameStatus {
+  const positional = positionalStatus(state);
+  if (positional) return positional;
+  const current = state.sideToMove;
+  const previous: Color = current === 'W' ? 'B' : 'W';
+
+  // No legal moves for current side
+  const moves = legalTurns(state);
+  if (moves.length === 0) {
+    const currArmy = current === 'W' ? state.armies.W : state.armies.B;
+    const currModel = getThreatModel(currArmy);
+    const inCheck = currModel.royalsInCheck(state, current).length > 0;
+    return inCheck
+      ? { type: 'win', by: 'checkmate', winner: previous }
+      : { type: 'win', by: 'stalemate-loss', winner: previous };
+  }
+
+  return { type: 'ongoing' };
+}
+
+/**
+ * The terminal conditions that do not depend on move generation: invasion, threefold,
+ * fifty-move. Returns null when none applies. Cheap enough to run before every ply of a
+ * replay (where it rejects moves appended after an invasion or a draw — the loser still
+ * has legal moves there, so move parsing alone would not notice the game had ended).
+ */
+export function positionalStatus(state: GameState): Exclude<GameStatus, { type: 'ongoing' }> | null {
   const current = state.sideToMove;
   const previous: Color = current === 'W' ? 'B' : 'W';
 
@@ -60,16 +86,5 @@ export function gameStatus(state: GameState): GameStatus {
   // 4. Insufficient material (stub — invasion makes bare-king positions winnable)
   // if (insufficientMaterial(state)) return { type: 'draw', by: 'material' };
 
-  // 5. No legal moves for current side
-  const moves = legalTurns(state);
-  if (moves.length === 0) {
-    const currArmy = current === 'W' ? state.armies.W : state.armies.B;
-    const currModel = getThreatModel(currArmy);
-    const inCheck = currModel.royalsInCheck(state, current).length > 0;
-    return inCheck
-      ? { type: 'win', by: 'checkmate', winner: previous }
-      : { type: 'win', by: 'stalemate-loss', winner: previous };
-  }
-
-  return { type: 'ongoing' };
+  return null;
 }

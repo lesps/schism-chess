@@ -1,4 +1,5 @@
 import type { Army, Color, GameState, Piece, Slot, Square } from './types';
+import { positionKey } from './positionKey';
 
 const FILES_STR = 'abcdefgh';
 
@@ -19,7 +20,8 @@ export function algebraicToSquare(s: string): Square {
 //
 // Board uses slot letters (K Q R B N P), uppercase=White, lowercase=Black.
 // Exhausted: space-separated algebraic squares (sorted), or '-'.
-// positionKeys is NOT serialized; parseSfen always returns positionKeys: [].
+// positionKeys is NOT serialized; parseSfen seeds it with the parsed position alone
+// (the position counts as its own first occurrence; earlier history is unknown).
 
 function serializeBoard(board: (Piece | null)[]): string {
   const ranks: string[] = [];
@@ -101,7 +103,7 @@ export function parseSfen(s: string): GameState {
   const exhausted: Square[] =
     exhStr === '-' ? [] : exhStr.split(' ').map(algebraicToSquare);
 
-  return {
+  const state: GameState = {
     board,
     sideToMove: (side === 'w' ? 'W' : 'B') as Color,
     armies: { W: armyWStr as Army, B: armyBStr as Army },
@@ -113,4 +115,6 @@ export function parseSfen(s: string): GameState {
     fullmoveNumber: parseInt(fullStr),
     positionKeys: [],
   };
+  state.positionKeys = [positionKey(state)];
+  return state;
 }

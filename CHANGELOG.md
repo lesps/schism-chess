@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.3.0 — 2026-10-10
+
+**v1.3.0 — Audit & UX pass** (rules v2.3.1: threefold counted as in standard chess; otherwise unchanged)
+
+A full audit of the engine, PBM flow, and UI. Every fix below has a regression test (`tests/engine/audit-fixes.test.ts`, `tests/ui/audit-ui.test.tsx`, `tests/e2e/audit.spec.ts`, plus additions to the PBM and Phantom suites).
+
+### Rules v2.3.1 — threefold repetition as in standard chess
+- The **starting position counts** as the first occurrence (it didn't, so returning to the start took four occurrences), and a double pawn step only makes a "new" position when an **en-passant capture is actually legal** (FIDE 9.2.3 — pinned pawns and Phantom Thralls don't count). Castling rights, Essence, and Exhaustion still distinguish positions; the draw stays automatic. `initialState`/`parseSfen` seed `positionKeys`; `positionKey` decides the en-passant token. Saved games or links that already reached a threefold under the new counting end at that ply.
+- The game now warns when the current position has occurred twice.
+
+### Reading the pieces while you play
+- Tapping a piece opens a larger **piece panel**: its name and side, a plain-language summary (every description rewritten), **live notes** for this position — the Wraith's Essence and whether it can bite, which moves an Accord piece borrows in Concord (or that it's alone / the Herald is dead), how many pieces the Herald leads and whether it can March, an Exhausted Stalker, a Shade giving piercing check, a royal in check, and what an advanced pawn can promote into (your army's own pieces, open slots only, or "Blocked") — plus a **legend** naming every marker that piece puts on the board (Move, Capture, Teleport, Homing step, Rampage, Strike, March, Takes your own piece…).
+- **Hover to inspect** on desktop: point at any piece to read its panel without selecting it.
+- The ⓘ sheet now opens on a **roster of every piece in both armies** with its icon and what it does; the army's strategy blurb sits under "How this army plays".
+
+### Engine fixes
+- **Castling rights lapse however the rook goes.** A Stalker Strike or a Shatter removing a corner rook left its castling right in place, so a different rook later reaching that corner could castle. Rights are now re-checked against the board after every turn.
+- **Exhaustion leaves with the Stalker.** A piece that captured an exhausted Stalker inherited its exhaustion mark (drawn dimmed with ⊗, carried in the repetition key, and able to block a later Stalker on that square from striking).
+- **Thralls never capture en passant.** A homing Thrall stepping diagonally onto the en-passant square removed the enemy pawn. It is now an ordinary homing move (`Pd6`).
+- **Twins may answer a pawn check en passant.** The one-action-per-check filter ignored en passant and rejected the capture.
+- **No play after the game ends.** `replayGame` / `validatePayload` reject plies after an invasion, threefold, or fifty-move ending — a loser could previously append a move to a finished PBM game and carry on. (`threefold.txt` fixture trimmed to its real final ply.)
+- New engine helper `isPiercingCheck(state)` (UI hint accuracy, below).
+
+### Bugs fixed in the app
+- **Opening the rules mid-game reset the board** to the start (or resume) position while the saved game kept its moves, desyncing the two — the next move could corrupt the save. The rules now open as an overlay above the still-mounted screen; the same bug wiped in-progress army picks when tapping an army's "?".
+- **Resumed games lost their history.** After a refresh, *My games* → Resume, or opening a PBM link, the move list, captures, last-move highlight, and threefold-repetition record were empty (games were restored from a SFEN snapshot). Games are now rebuilt from their move list — in PBM you can finally see what your opponent just played.
+- **Refreshing after opening a game link showed a false "History conflict"** (the stale `#g=` link was re-imported). Links are consumed from the address bar once opened.
+- **Deleting a game reloaded the page**, which dumped you into your last game (and re-imported any link in the URL). Deletion is now in place, with a confirm tap.
+- **Resume did nothing for a pending challenge/response**; there was also no way to re-send a lost challenge, response, or move link. Games now open at whatever step they need (share challenge, respond, reveal, play), and a waiting PBM game has a **Share link again** button.
+- **Re-opening your own response link** offered "Army commitment lost — forfeit & delete game". It now just shows the link again.
+- **PBM board orientation** flipped with the side to move; it now stays on your color.
+- **Twins pawn promotion with a Rally available** silently promoted to the first piece. You now choose the piece, then the Rally.
+- "**Piercing check** — blocking is impossible" showed for any check while facing the Phantom, even a plain rook check you *can* block. Ordinary checks now say "Check!", and a red **Check** badge sits in the header.
+- The move list's auto-scroll could scroll the whole fixed layout on short screens; on desktop the move list was squeezed to one clipped line; landscape phones got a ~150 px board; piece glyphs were sized by viewport width (overflowing squares in landscape).
+- Tapping pieces made the board jump (hint / piece-info / Shatter bars appeared above it).
+- Copy link crashed where the async clipboard API is missing (plain http, older browsers).
+- The PBM creator's "Opponent's name" was collected and thrown away — it now pre-fills the respondent's name.
+- Rampage/Shatter previews named victims by slot letter ("Black Crown Q") — now "Black Queen".
+- *New game* on the end screen went home; the end modal couldn't be dismissed to study the final position; and the hotseat board rotated away from the winner after the final move.
+
+### New
+- **Drag-and-drop** moves (mouse and touch), alongside tap-tap.
+- **Undo** for local games (header ↶, Ctrl/⌘+Z, and in the end modal); **Rematch** with the same armies.
+- **Slide animations** for moves (castling rook, Marches, and Rallies included), a pop-in for teleports, and a burst on captured squares; the hotseat board rotates only after the move lands.
+- **Sound & haptics** — small synthesized cues for move, capture, special actions, check, and game end, with a toggle (ⓘ sheet). Closes backlog item 3.
+- **Responsive layout:** board-first portrait layout (the board never moves), and a board + sidebar layout on desktop, tablets, and landscape phones; a classic two-column score sheet in the sidebar.
+- **Keyboard play on the board** (arrows / Enter / Esc, F to flip) and Esc closes any sheet.
+- **Browser/Android Back** closes the rules, then returns home, instead of leaving the app.
+- **Home "Continue" card** for your latest unfinished game, and an army emblem row.
+- **Shorter hotseat setup:** Player 1 picks straight away; the handover screen doubles as Player 2's privacy screen; 🎲 Random army.
+- **Links open directly** — no extra "Import →" tap.
+- **My games** sorts by recency, marks games where it's your move, says "You won / You lost" for finished PBM games, and opens pending challenges/responses at the right step; captured pieces read "White took / Black took", sorted by value.
+- Share sheets send a message written for the recipient ("I challenge you! My army is sealed — open this to pick yours:", "My move 3 (Nf3) — your turn:") instead of the sender's instruction.
+- **Replay** shows the last move and checks, flips, steps with ←/→/Home/End, and states the result.
+- Settings: "Rotate board to face the player to move" (hotseat) and "Sound & vibration", saved per device.
+
 ## 1.2.0 — 2026-07-08
 
 **v1.2.0 — Parsimony pass, fun first (rules v2.3)**
@@ -46,6 +102,15 @@ All six armies reviewed with one instruction: err toward fun. Two changed.
 ## 1.0.1 — 2026-07-06
 
 **v1.0.1 — Rules-fidelity bug fixes (rules v2.1.1)**
+
+### Rules v2.3.1 — threefold repetition as in standard chess
+- The **starting position counts** as the first occurrence (it didn't, so returning to the start took four occurrences), and a double pawn step only makes a "new" position when an **en-passant capture is actually legal** (FIDE 9.2.3 — pinned pawns and Phantom Thralls don't count). Castling rights, Essence, and Exhaustion still distinguish positions; the draw stays automatic. `initialState`/`parseSfen` seed `positionKeys`; `positionKey` decides the en-passant token. Saved games or links that already reached a threefold under the new counting end at that ply.
+- The game now warns when the current position has occurred twice.
+
+### Reading the pieces while you play
+- Tapping a piece opens a larger **piece panel**: its name and side, a plain-language summary (every description rewritten), **live notes** for this position — the Wraith's Essence and whether it can bite, which moves an Accord piece borrows in Concord (or that it's alone / the Herald is dead), how many pieces the Herald leads and whether it can March, an Exhausted Stalker, a Shade giving piercing check, a royal in check, and what an advanced pawn can promote into (your army's own pieces, open slots only, or "Blocked") — plus a **legend** naming every marker that piece puts on the board (Move, Capture, Teleport, Homing step, Rampage, Strike, March, Takes your own piece…).
+- **Hover to inspect** on desktop: point at any piece to read its panel without selecting it.
+- The ⓘ sheet now opens on a **roster of every piece in both armies** with its icon and what it does; the army's strategy blurb sits under "How this army plays".
 
 ### Engine fixes
 - **Phantom Thrall homing tightened** (the reported bug): bare Chebyshev reduction let Thralls sidestep to both forward diagonals when the enemy king was straight ahead, step diagonally *backward* when the king was due east/west, and (vs Twins' spread Warlords) qualify in all four diagonal directions. A homing step now must move genuinely toward a king: Chebyshev distance strictly decreases **and** neither the rank nor file distance increases (`stepHomesTowardKing` in `src/engine/phantom.ts`). `THRALL_HOMING_TWINS = 'either'` semantics unchanged.

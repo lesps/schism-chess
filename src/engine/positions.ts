@@ -1,4 +1,5 @@
 import type { Army, Color, GameState, Piece, Slot, Square } from './types';
+import { positionKey } from './positionKey';
 
 function sq(file: number, rank: number): Square {
   return rank * 8 + file;
@@ -48,7 +49,7 @@ export function initialState(armyW: Army, armyB: Army): GameState {
   if (armyB === 'Crown') castlingParts.push('kq');
   const castlingRights = castlingParts.length > 0 ? castlingParts.join('') : '-';
 
-  return {
+  const state: GameState = {
     board,
     sideToMove: 'W',
     armies: { W: armyW, B: armyB },
@@ -63,4 +64,7 @@ export function initialState(armyW: Army, armyB: Army): GameState {
     fullmoveNumber: 1,
     positionKeys: [],
   };
+  // The starting position is the first occurrence for threefold repetition (FIDE).
+  state.positionKeys = [positionKey(state)];
+  return state;
 }

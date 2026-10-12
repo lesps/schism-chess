@@ -302,6 +302,24 @@ function phantomAttackedSquares(state: GameState, byColor: Color): Set<Square> {
   return attacked;
 }
 
+/**
+ * True iff the side to move stands in *piercing* check — an enemy Phantom Shade has a
+ * clear line to one of its royals (so interposition is not an answer). Other checks
+ * from a Phantom army (rook, bishop, …) are ordinary and may be blocked.
+ */
+export function isPiercingCheck(state: GameState): boolean {
+  const mover = state.sideToMove;
+  const phantomColor: Color = mover === 'W' ? 'B' : 'W';
+  if (state.armies[phantomColor] !== 'Phantom') return false;
+  const shadeSq = findShade(state.board, phantomColor);
+  if (shadeSq === null) return false;
+  for (let sq = 0; sq < 64; sq++) {
+    const p = state.board[sq];
+    if (p && p.color === mover && p.slot === 'K' && shadeHasLOS(state.board, shadeSq, sq)) return true;
+  }
+  return false;
+}
+
 export const phantomThreatModel: ThreatModel = {
   attackedSquares: phantomAttackedSquares,
 

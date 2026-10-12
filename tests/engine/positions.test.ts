@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { initialState } from '../../src/engine/positions';
+import { positionKey } from '../../src/engine/positionKey';
 import type { Army } from '../../src/engine/types';
 
 // sq(file, rank): file 0=a, rank 0=white's 1st rank
@@ -201,10 +202,11 @@ describe('initialState — common properties', () => {
     }
   });
 
-  it('positionKeys starts empty', () => {
+  it('positionKeys starts with the initial position (it counts toward threefold, as in FIDE)', () => {
     for (const w of ARMIES) {
       for (const b of ARMIES) {
-        expect(initialState(w, b).positionKeys).toEqual([]);
+        const s = initialState(w, b);
+        expect(s.positionKeys).toEqual([positionKey(s)]);
       }
     }
   });

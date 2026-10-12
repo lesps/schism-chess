@@ -12,6 +12,8 @@ export interface Transport {
   saveGame(id: string, payload: PBMPayload): void;
   listGames(): Array<{ id: string; payload: PBMPayload }>;
   deleteGame(id: string): void;
+  loadMeta(id: string): LocalGameMeta | null;
+  saveMeta(id: string, meta: LocalGameMeta): void;
 }
 
 /**
@@ -24,6 +26,8 @@ export interface LocalGameMeta {
   myColor: Color;
   isLocal?: boolean;
   commit?: { army: Army; salt: string };
+  /** ms timestamp of the last local change (sorts My games; picks "Continue"). */
+  updatedAt?: number;
 }
 
 const GAME_PREFIX = 'schism-game-';
@@ -81,6 +85,22 @@ export class LocalStorageTransport implements Transport {
 }
 
 export const transport = new LocalStorageTransport();
+
+/** Save a payload and stamp its meta with the current time (keeping other meta fields). */
+export function persistGame(id: string, payload: PBMPayload, meta?: Partial<LocalGameMeta>): void {
+  transport.saveGame(id, payload);
+  const prev = transport.loadMeta(id);
+  const myColor = meta?.myColor ?? prev?.myColor;
+  if (!myColor) return; // spectator copy: no local meta to stamp
+  transport.saveMeta(id, { ...prev, ...meta, myColor, updatedAt: Date.now() });
+}
+
+const PHASE_RANK: Record<PBMPayload['phase'], number> = { commit: 0, reveal: 1, play: 2, finished: 3 };
+
+/** True if `incoming` is an earlier protocol phase than `stored` (an old link re-opened). */
+export function isOlderPhase(stored: PBMPayload, incoming: PBMPayload): boolean {
+  return PHASE_RANK[incoming.phase] < PHASE_RANK[stored.phase];
+}
 
 /** Returns true if incoming.moves is a strict extension of stored.moves. */
 export function checkMonotonicGuard(stored: PBMPayload, incoming: PBMPayload): boolean {

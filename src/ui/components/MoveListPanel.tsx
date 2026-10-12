@@ -9,19 +9,20 @@ interface Props {
 }
 
 export function MoveListPanel({ history }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
+  // Scroll only the list itself — scrollIntoView would also scroll the
+  // (overflow-hidden) screen containers and shove the board out of view.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [history.length]);
 
   if (history.length === 0) {
     return (
-      <div className="move-list">
+      <div className="move-list move-list-empty">
         <div className="move-list-title">Moves</div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', paddingTop: 4 }}>
-          Game in progress — no moves yet.
-        </p>
+        <p className="move-list-placeholder">No moves yet.</p>
       </div>
     );
   }
@@ -38,26 +39,27 @@ export function MoveListPanel({ history }: Props) {
   const latestOverall = history.length - 1;
 
   return (
-    <div className="move-list" role="log" aria-label="Move history">
+    <div className="move-list" role="log" aria-label="Move history" ref={listRef}>
       <div className="move-list-title">Moves</div>
-      {pairs.map(({ num, white, black }) => {
-        const whiteIdx = (num - 1) * 2;
-        const blackIdx = whiteIdx + 1;
-        return (
-          <div key={num} className="move-pair">
-            <span className="move-num">{num}.</span>
-            <span className={`move-san white${whiteIdx === latestOverall ? ' latest' : ''}`}>
-              {white}
-            </span>
-            {black !== undefined && (
-              <span className={`move-san${blackIdx === latestOverall ? ' latest' : ''}`}>
-                {black}
+      <div className="move-list-pairs">
+        {pairs.map(({ num, white, black }) => {
+          const whiteIdx = (num - 1) * 2;
+          const blackIdx = whiteIdx + 1;
+          return (
+            <div key={num} className="move-pair">
+              <span className="move-num">{num}.</span>
+              <span className={`move-san white${whiteIdx === latestOverall ? ' latest' : ''}`}>
+                {white}
               </span>
-            )}
-          </div>
-        );
-      })}
-      <div ref={bottomRef} />
+              {black !== undefined && (
+                <span className={`move-san${blackIdx === latestOverall ? ' latest' : ''}`}>
+                  {black}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

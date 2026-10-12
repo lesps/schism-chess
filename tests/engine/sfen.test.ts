@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { serializeSfen, parseSfen, squareToAlgebraic, algebraicToSquare } from '../../src/engine/sfen';
 import { initialState } from '../../src/engine/positions';
+import { positionKey } from '../../src/engine/positionKey';
 import type { Army, GameState } from '../../src/engine/types';
 
 const ARMIES: Army[] = ['Crown', 'Phantom', 'Accord', 'Twins', 'Veil', 'Wild'];
@@ -129,13 +130,13 @@ describe('SFEN-X — round-trip with non-default state fields', () => {
     expect(parseSfen(serializeSfen(state)).sideToMove).toBe('B');
   });
 
-  it('parseSfen always returns positionKeys: []', () => {
+  it('parseSfen seeds positionKeys with the parsed position only', () => {
     const state: GameState = {
       ...initialState('Crown', 'Crown'),
       positionKeys: ['key1', 'key2'],
     };
-    // positionKeys is not serialized; parsed result always has []
-    expect(parseSfen(serializeSfen(state)).positionKeys).toEqual([]);
+    // positionKeys is not serialized; the parsed position is its own first occurrence
+    expect(parseSfen(serializeSfen(state)).positionKeys).toEqual([positionKey(state)]);
   });
 
   it('property test: 50 random state mutations round-trip', () => {
@@ -151,7 +152,8 @@ describe('SFEN-X — round-trip with non-default state fields', () => {
         fullmoveNumber: i + 1,
         positionKeys: [],
       };
-      expect(parseSfen(serializeSfen(state)), `iteration ${i}`).toEqual(state);
+      expect(parseSfen(serializeSfen(state)), `iteration ${i}`)
+        .toEqual({ ...state, positionKeys: [positionKey(state)] });
     }
   });
 });

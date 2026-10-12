@@ -7,35 +7,56 @@ interface Props {
   title: string;
   subtitle?: string;
   onDone: () => void;
-  /** If set, show a "Back to game" button instead of "Done". */
+  /** If set, also show a "Back to game" button. */
   onBackToGame?: () => void;
+  /** The message that goes with the link (to the recipient). Defaults to the title. */
+  message?: string;
 }
 
 function buildShareUrl(encoded: string): string {
   return `${window.location.href.split('#')[0]}#g=${encoded}`;
 }
 
-export function ShareScreen({ payload, title, subtitle, onDone, onBackToGame }: Props) {
+/** Clipboard write with a legacy fallback (no async clipboard on plain http / old browsers). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to the legacy path */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+export function ShareScreen({ payload, title, subtitle, onDone, onBackToGame, message }: Props) {
   const encoded = encodePayload(payload);
   const url = buildShareUrl(encoded);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
 
-  function handleCopy() {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      timeoutRef.current = setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
-      // Fallback: select the textarea
-      const el = document.getElementById('share-url-input') as HTMLInputElement | null;
-      el?.select();
-    });
+  async function handleCopy() {
+    const ok = await copyText(url);
+    if (!ok) inputRef.current?.select(); // let the user copy it by hand
+    setCopyState(ok ? 'copied' : 'failed');
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setCopyState('idle'), 2000);
   }
 
   function handleNativeShare() {
-    navigator.share?.({ title: 'Schism Chess', url }).catch(() => {});
+    navigator.share?.({ title: 'Schism Chess', text: message ?? title, url }).catch(() => {});
   }
 
   return (
@@ -46,8 +67,9 @@ export function ShareScreen({ payload, title, subtitle, onDone, onBackToGame }: 
       </div>
 
       <div className="share-url-block">
-        <label className="share-url-label">Share this link</label>
+        <label className="share-url-label" htmlFor="share-url-input">Share this link</label>
         <input
+          ref={inputRef}
           id="share-url-input"
           className="share-url-input"
           data-testid="share-url"
@@ -63,18 +85,19 @@ export function ShareScreen({ payload, title, subtitle, onDone, onBackToGame }: 
             Share…
           </button>
         )}
-        <button className="btn btn-secondary" onClick={handleCopy}>
-          {copied ? 'Copied!' : 'Copy link'}
+        <button className="btn btn-secondary" onClick={() => void handleCopy()} data-testid="copy-link">
+          {copyState === 'copied' ? '✓ Copied!' : copyState === 'failed' ? 'Select & copy above' : 'Copy link'}
         </button>
       </div>
 
       <div className="share-text-block">
-        <label className="share-url-label">Or copy this text (for chat apps)</label>
+        <label className="share-url-label" htmlFor="share-text-input">Or copy this text (for chat apps)</label>
         <textarea
+          id="share-text-input"
           className="share-textarea"
           data-testid="share-text"
           readOnly
-          value={`Schism Chess — ${title}\n${url}`}
+          value={`Schism Chess — ${message ?? title}\n${url}`}
           rows={3}
         />
       </div>

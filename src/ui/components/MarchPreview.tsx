@@ -3,6 +3,7 @@ import { computeMarch } from '../../engine/accord';
 import { PIECE_COLORS, getSlotName } from '../shared';
 import { PieceIcon } from '../pieceArt';
 import { HINTS } from '../strings';
+import { useSheetKeys } from './useSheetKeys';
 
 interface Props {
   turn: Turn & { primary: MarchMove };
@@ -13,6 +14,7 @@ interface Props {
 
 /** Confirmation sheet for an Accord March: lists every piece that will step and where. */
 export function MarchPreview({ turn, gameState, onConfirm, onCancel }: Props) {
+  useSheetKeys(onCancel);
   const { board, armies, sideToMove } = gameState;
   const { from, to } = turn.primary;
   const dr = (to >> 3) - (from >> 3);
@@ -26,7 +28,8 @@ export function MarchPreview({ turn, gameState, onConfirm, onCancel }: Props) {
 
   return (
     <div className="preview-overlay" onClick={onCancel} data-testid="march-preview">
-      <div className="preview-sheet" onClick={(e: { stopPropagation(): void }) => e.stopPropagation()}>
+      <div className="preview-sheet" role="dialog" aria-modal aria-label={HINTS.MARCH_CONFIRM_TITLE} onClick={(e: { stopPropagation(): void }) => e.stopPropagation()}>
+        <div className="sheet-grip" aria-hidden />
         <div className="preview-title">{HINTS.MARCH_CONFIRM_TITLE}</div>
         <div className="preview-desc">
           {coordOf(from)} → {coordOf(to)} — {HINTS.MARCH_CONFIRM}

@@ -1,4 +1,4 @@
-# Schism Chess — Rules v2.3
+# Schism Chess — Rules v2.3.1
 
 A chess variant inspired by David Sirlin's Chess 2: The Sequel. Six asymmetric armies, a midline invasion win condition, and no hidden information.
 
@@ -285,7 +285,7 @@ Quick identities and primary win lanes:
 
 ## Draws
 
-- **Threefold Repetition** of the same position (including side to move and, for the Veil, Essence count).
+- **Threefold Repetition** — counted as in standard chess (FIDE): the game is drawn when the same position occurs for the third time, **counting the starting position** as the first occurrence. Positions are the same when the same player is to move, the same pieces stand on the same squares, and the same moves are possible: castling rights must match, and the en-passant square only matters when an en-passant capture is actually legal. Army state that changes what pieces can do must match too — the Veil's Essence and any Stalker's Exhaustion. In this game the draw is applied automatically on the third occurrence (no claim needed).
 - **Fifty-Move Rule** (no capture, no pawn/Thrall move for fifty moves by both).
 - **Insufficient Material** when neither side can checkmate **and** invasion is impossible for both.
 
@@ -357,6 +357,10 @@ Retained from earlier versions: the midline-invasion / stalemate-loss engine (th
 -----
 
 ## Changelog
+
+### v2.3.1 — Threefold Counted as in Standard Chess
+
+- **Threefold repetition** now counts exactly as FIDE does: the starting position is the first occurrence, and a double pawn step only creates a new position when an en-passant capture is actually possible (FIDE 9.2.3). Previously the starting position wasn't counted and any double step made the position "different". Castling rights, side to move, Essence, and Exhaustion still distinguish positions. The draw stays automatic.
 
 ### v2.3 — Parsimony Pass: Reinforcement, Concord & the March
 

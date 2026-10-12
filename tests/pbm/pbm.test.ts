@@ -493,3 +493,32 @@ describe('PBM: schema validation', () => {
     if (!vr.ok) expect(vr.error.type).toBe('schema');
   });
 });
+
+describe('PBM: moves appended after the game ended', () => {
+  it('a payload that keeps playing after an invasion win is rejected', async () => {
+    const SALT = 'ab'.repeat(16);
+    let payload = await createGame('Alice', 'W', 'Crown', SALT, nodeHasher);
+    payload = respondToCommit(payload, 'Bob', 'Crown');
+    payload = await revealArmy(payload, 'Crown', SALT, nodeHasher);
+    const sans = ['e4', 'Nc6', 'Ke2', 'Nb8', 'Ke3', 'Nc6', 'Kf4', 'Nb8', 'Kf5'];
+    for (const t of sanSequenceToTurns({ W: 'Crown', B: 'Crown' }, sans)) payload = appendTurn(payload, t);
+    expect(payload.phase).toBe('finished');
+    expect(payload.result).toBe('1-0');
+
+    // The loser forges a continuation: 5...Nc6, and declares the game ongoing again.
+    const forged: PBMPayload = { ...payload, phase: 'play', result: null, moves: [...payload.moves, 'Nc6'] };
+    const res = await validatePayload(forged, nodeHasher);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.type).toBe('replay');
+  });
+});
+
+describe('PBM: suggested opponent label', () => {
+  it('createGame carries the suggestion; respondToCommit replaces it', async () => {
+    const p = await createGame('Alice', 'W', 'Crown', 'cd'.repeat(16), nodeHasher, 'Bob');
+    expect(p.white.label).toBe('Alice');
+    expect(p.black.label).toBe('Bob');
+    const r = respondToCommit(p, 'Robert', 'Veil');
+    expect(r.black.label).toBe('Robert');
+  });
+});

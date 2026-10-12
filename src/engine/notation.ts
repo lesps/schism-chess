@@ -4,7 +4,7 @@ import type {
 } from './types';
 import { legalTurns } from './legality';
 import { applyTurnUnchecked } from './apply';
-import { gameStatus } from './status';
+import { gameStatus, positionalStatus } from './status';
 import { getThreatModel } from './threat';
 import { squareToAlgebraic, algebraicToSquare } from './sfen';
 import { initialState } from './positions';
@@ -44,9 +44,16 @@ function rankChar(sq: Square): string { return String((sq >> 3) + 1); }
 /** True iff a StandardMove is a capture (including en passant for diagonal pawn moves). */
 function isMvCapture(state: GameState, mv: StandardMove): boolean {
   if (state.board[mv.to] !== null) return true;
-  // En passant: pawn moves diagonally to the ep target square (which is empty)
-  if (mv.to === state.enPassantTarget && (mv.from & 7) !== (mv.to & 7)) return true;
-  return false;
+  return isEnPassantMove(state, mv);
+}
+
+/** A pawn stepping diagonally onto the ep target square (Phantom Thralls never capture e.p.). */
+function isEnPassantMove(state: GameState, mv: StandardMove): boolean {
+  if (mv.to !== state.enPassantTarget || (mv.from & 7) === (mv.to & 7)) return false;
+  const piece = state.board[mv.from];
+  if (!piece || piece.slot !== 'P') return false;
+  const army = piece.color === 'W' ? state.armies.W : state.armies.B;
+  return army !== 'Phantom';
 }
 
 /**
@@ -80,7 +87,7 @@ function boardAfterPrimary(state: GameState, primary: PrimaryAction): (Piece | n
     const piece = b[mv.from]!;
     b[mv.to] = mv.promotion ? { slot: mv.promotion, color: piece.color } : piece;
     b[mv.from] = null;
-    if (piece.slot === 'P' && mv.to === state.enPassantTarget && (mv.from & 7) !== (mv.to & 7)) {
+    if (isEnPassantMove(state, mv)) {
       b[color === 'W' ? mv.to - 8 : mv.to + 8] = null;
     }
     if (piece.slot === 'K' && Math.abs((mv.to & 7) - (mv.from & 7)) === 2) {
@@ -654,11 +661,17 @@ export function replayGame(record: GameRecord): { finalState: GameState } | Repl
     const moveNum = i + 1;
     const { white, black } = record.moves[i];
 
+    if (positionalStatus(state)) {
+      return { moveNumber: moveNum, side: 'W', san: white, reason: 'The game is over — no further moves are allowed' };
+    }
     const wt = sanToTurn(state, white);
     if (isParseError(wt)) return { moveNumber: moveNum, side: 'W', san: white, reason: wt.error };
     state = applyTurnUnchecked(state, wt);
 
     if (black !== undefined) {
+      if (positionalStatus(state)) {
+        return { moveNumber: moveNum, side: 'B', san: black, reason: 'The game is over — no further moves are allowed' };
+      }
       const bt = sanToTurn(state, black);
       if (isParseError(bt)) return { moveNumber: moveNum, side: 'B', san: black, reason: bt.error };
       state = applyTurnUnchecked(state, bt);
